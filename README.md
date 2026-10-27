@@ -30,6 +30,11 @@ the `plugins/` folder of a **Paper 26.2** server.
 2. Every player runs `/bh join` (at least two).
 3. An admin runs `/bh start`.
 
+Joining shows a title and a lobby sidebar that stays on screen: the status (*Need 1 more*,
+*Ready*, or *No spawn set* for the admin), the players who joined, the length of both phases, and
+how to leave. During the game, the same sidebar shows your role, and the lobby comes back at the
+end.
+
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
 back at the end of the game, even after a server crash (on their next join). During the game,
 everyone is in adventure mode and cannot break, place, drop or pick up anything.
