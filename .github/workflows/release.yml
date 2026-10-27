@@ -1,0 +1,99 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Checks and builds with a read-only token: the Gradle build runs third-party code (plugins,
+  # toolchain download), which never gets near the token that can publish.
+  jar:
+    runs-on: ubuntu-latest
+    outputs:
+      paper: ${{ steps.paper.outputs.paper }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the main history, to check the tag is on it
+          persist-credentials: false
+      # A tag outside main would publish code that was never merged, and tags cannot be moved.
+      - name: Check the tag is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+      # Documentation does not change the jar: since the previous release, a file other than
+      # docs (same list as ci.yml) must have changed, the version bump in build.gradle.kts aside.
+      - name: Check code changed since the previous release
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_SHA^" 2>/dev/null || true)
+          [ -z "$previous" ] && exit 0
+          files=$(git diff --name-only "$previous" "$GITHUB_SHA" -- . ':!*.md' ':!docs' ':!LICENSE' ':!.github/ISSUE_TEMPLATE')
+          if [ "$files" = build.gradle.kts ]; then
+            other=$(git diff -U0 "$previous" "$GITHUB_SHA" -- build.gradle.kts \
+              | grep -E '^[+-]' | grep -vE '^(\+\+\+|---) |^[+-]version = ' || true)
+            [ -n "$other" ] || files=
+          fi
+          if [ -z "$files" ]; then
+            echo "::error::Only documentation changed since $previous: nothing to release"
+            exit 1
+          fi
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      # A tag that does not match build.gradle.kts would publish a jar with a wrong version.
+      - name: Check the tag matches build.gradle.kts
+        run: |
+          version=$(bash gradlew -q properties --property version | sed -n 's/^version: //p')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME but build.gradle.kts says $version"
+            exit 1
+          fi
+          echo "JAR=build/libs/BlockHunt-$version.jar" >> "$GITHUB_ENV"
+      # The Paper version the jar is compiled against, shown on the release: 26.2.build.135-stable.
+      - name: Read the target Paper version
+        id: paper
+        run: echo "paper=$(sed -n 's/.*paper-api:\([^"]*\)".*/\1/p' build.gradle.kts | head -1)" >> "$GITHUB_OUTPUT"
+      - run: bash gradlew build
+      - name: Checksum
+        run: (cd "$(dirname "$JAR")" && sha256sum "$(basename "$JAR")") > "$JAR.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            ${{ env.JAR }}
+            ${{ env.JAR }}.sha256
+          if-no-files-found: error
+
+  # The only job with write permissions: it runs no build code, only GitHub's own actions and gh.
+  publish:
+    needs: jar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: dist
+      # Lets anyone check the jar was built here, from this tag: gh attestation verify.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.jar
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PAPER: ${{ needs.jar.outputs.paper }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME (Paper ${PAPER%%.build*})" \
+            --notes "For **Paper ${PAPER%%.build*}** servers, built against \`paper-api $PAPER\` with Java 25." \
+            --generate-notes

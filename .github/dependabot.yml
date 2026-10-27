@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    # One pull request per week for minor and patch versions, majors stay separate.
+    groups:
+      dependencies:
+        update-types: [minor, patch]
+    # The Paper version is the Minecraft version the plugin targets, shown on each release:
+    # moving to a new one is a deliberate change (plugin.yml api-version, README), not a bump.
+    ignore:
+      - dependency-name: io.papermc.paper:paper-api
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
