@@ -39,7 +39,9 @@ final class Disguise {
 
     private final Plugin plugin;
     private final Player player;
-    private final BlockData block;
+    private BlockData block;
+    /** Server tick from which the look can change again. */
+    private int nextChange;
     private final BlockDisplay display;
     private final Interaction hitbox;
 
@@ -82,6 +84,20 @@ final class Disguise {
 
     boolean owns(Entity entity) {
         return hitbox.equals(entity);
+    }
+
+    int cooldownLeft() {
+        return Math.max(0, nextChange - player.getServer().getCurrentTick());
+    }
+
+    /** New look, effective at once even while solid. */
+    void change(BlockData newBlock, int cooldownTicks) {
+        block = newBlock;
+        nextChange = player.getServer().getCurrentTick() + cooldownTicks;
+        display.setBlock(newBlock);
+        if (solid != null) {
+            sendFake();
+        }
     }
 
     /** Also called for players who join after the disguise was applied. */

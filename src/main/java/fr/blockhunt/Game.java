@@ -8,7 +8,12 @@ import net.kyori.adventure.title.Title;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -276,8 +281,10 @@ final class Game implements Listener {
 
     // --- Events ---------------------------------------------------------------
 
-    // HIGH, after the protection plugins: a hit they deny is already cancelled and ignored.
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    // Not ignoreCancelled: vanilla never "attacks" an Interaction (willAttack is false), so Paper
+    // fires this event already cancelled, and setCancelled cannot change that. Only our own
+    // hitboxes are handled here, which no protection plugin has a reason to guard.
+    @EventHandler(priority = EventPriority.HIGH)
     public void onAttack(PrePlayerAttackEntityEvent event) {
         Disguise target = null;
         for (Disguise disguise : disguises.values()) {
@@ -289,7 +296,6 @@ final class Game implements Listener {
         if (target == null) {
             return;
         }
-        event.setCancelled(true);
 
         Player attacker = event.getPlayer();
         Player hider = target.player();
@@ -298,6 +304,37 @@ final class Game implements Listener {
         } else if (state == State.LOBBY) {
             attacker.sendActionBar(Component.text("Hit " + hider.getName() + "'s disguise.", NamedTextColor.AQUA));
         }
+    }
+
+    /** A disguised player right-clicking a block of the map takes its look, once per cooldown. */
+    // Not ignoreCancelled: arenas are often protected, and a protection plugin denying the click
+    // must not block the copy, which changes nothing in the world.
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onRightClick(PlayerInteractEvent event) {
+        // PlayerInteractEvent fires twice per click: main hand, then off hand.
+        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+        Player player = event.getPlayer();
+        Disguise disguise = disguises.get(player.getUniqueId());
+        Block block = event.getClickedBlock();
+        if (disguise == null || block == null) {
+            return;
+        }
+        event.setCancelled(true);
+
+        int cooldownLeft = disguise.cooldownLeft();
+        if (cooldownLeft > 0) {
+            deny(player, "You can change again in " + (cooldownLeft + 19) / 20 + "s.");
+            return;
+        }
+        // A display does not draw block entities (chests, signs, beds...): it would be invisible.
+        if (!block.getType().isSolid() || block.getState(false) instanceof TileState) {
+            deny(player, "You cannot copy this block.");
+            return;
+        }
+        disguise.change(block.getBlockData(), plugin.getConfig().getInt("change-cooldown-seconds") * 20);
+        player.sendActionBar(Component.text("You are now " + block.getType().getKey().getKey() + ".", NamedTextColor.GREEN));
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

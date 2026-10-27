@@ -5,6 +5,9 @@ seek-seconds: 300
 # A hider standing still this long turns into a real-looking block.
 solidify-seconds: 3
 
+# A hider right-clicking a block of the map takes its look, at most once per cooldown.
+change-cooldown-seconds: 30
+
 seekers: 1
 
 # Each hider gets one at random. Full blocks only: the fake block fills the whole cell.
