@@ -15,6 +15,15 @@ repositories {
 dependencies {
     // 26.x coordinate: no more "-R0.1-SNAPSHOT", the format is <version>.build.<number>-<stage>.
     compileOnly("io.papermc.paper:paper-api:26.2.build.135-stable")
+
+    testImplementation("io.papermc.paper:paper-api:26.2.build.135-stable")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.2:4.117.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 java {

@@ -5,16 +5,15 @@ import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
-import org.bukkit.GameMode;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -36,13 +35,10 @@ import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -87,8 +83,7 @@ final class Game implements Listener {
     }
 
     private final BlockHuntPlugin plugin;
-    private final NamespacedKey stashKey;
-    private final NamespacedKey modeKey;
+    private final Stash stash;
 
     /** Everyone who joined, in the lobby or in the running game. */
     private final Set<UUID> players = new LinkedHashSet<>();
@@ -108,8 +103,7 @@ final class Game implements Listener {
 
     Game(BlockHuntPlugin plugin) {
         this.plugin = plugin;
-        stashKey = new NamespacedKey(plugin, "inventory");
-        modeKey = new NamespacedKey(plugin, "gamemode");
+        stash = new Stash(plugin);
         // Always running: test disguises need ticking outside a game too.
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1, 1);
     }
@@ -144,8 +138,7 @@ final class Game implements Listener {
             sender.sendMessage(Component.text("A game is already running.", NamedTextColor.RED));
             return;
         }
-        List<Player> online = new ArrayList<>(online(players));
-        if (online.size() < 2) {
+        if (players.size() < 2) {
             sender.sendMessage(Component.text("At least 2 players must /bh join.", NamedTextColor.RED));
             return;
         }
@@ -163,6 +156,23 @@ final class Game implements Listener {
             return;
         }
 
+        // Teleport first, while still in the lobby: a world change drops test disguises, it must
+        // not count as leaving the game. A refused teleport (a mount, another plugin) leaves that
+        // player out, rather than playing from wherever they stand.
+        List<Player> online = new ArrayList<>();
+        for (Player player : online(players)) {
+            if (player.teleport(spawn)) {
+                online.add(player);
+            } else {
+                players.remove(player.getUniqueId());
+                deny(player, "Could not reach the arena: you are out of this game.");
+            }
+        }
+        if (online.size() < 2) {
+            sender.sendMessage(Component.text("Not enough players reached the arena.", NamedTextColor.RED));
+            return;
+        }
+
         // F3+B draws every Interaction hitbox, so every hider: reduced debug info turns it off.
         // ponytail: per world, there is no per-player API. A crash mid-game leaves the rule on
         // in the arena: harmless, /gamerule reducedDebugInfo false puts it back.
@@ -170,16 +180,16 @@ final class Game implements Listener {
         debugInfoBefore = arena.getGameRuleValue(GameRules.REDUCED_DEBUG_INFO);
         arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, true);
 
-        // Teleport first, while still in the lobby: a world change drops test disguises,
-        // it must not count as leaving the game.
         int taunts = plugin.getConfig().getInt("taunts");
         for (Player player : online) {
-            player.teleport(spawn);
             undisguise(player);
-            stash(player);
+            stash.save(player);
             sessions.put(player.getUniqueId(), new Session(new Sidebar(player), taunts));
         }
+        assignRoles(online, blocks);
+    }
 
+    private void assignRoles(List<Player> online, List<Material> blocks) {
         Collections.shuffle(online);
         int seekerCount = Math.clamp(plugin.getConfig().getInt("seekers"), 1, online.size() - 1);
         int hideTicks = plugin.getConfig().getInt("hide-seconds") * 20;
@@ -200,8 +210,6 @@ final class Game implements Listener {
                         Component.text("You are " + name(block) + ". Hide!")));
             }
         }
-        // Players who joined but are offline do not play.
-        players.retainAll(online.stream().map(Player::getUniqueId).toList());
         phase(State.HIDING, hideTicks);
         updateHud();
     }
@@ -443,7 +451,9 @@ final class Game implements Listener {
         if (session != null) {
             session.sidebar.remove();
         }
-        unstash(player);
+        // Or the sonar, taunt or block cooldowns would follow the player out of the game.
+        clearKit(player);
+        stash.restore(player);
         // The XP bar was only ever faked on the client: resend the real one.
         player.sendExperienceChange(player.getExp(), player.getLevel());
     }
@@ -474,48 +484,27 @@ final class Game implements Listener {
 
     // --- Inventories ----------------------------------------------------------
 
-    /**
-     * Moves the player's inventory and game mode into their own PDC, saved with their player
-     * data: a crash mid-game gives them back on their next join instead of losing them.
-     * Adventure mode for the game: no flying hider, no noclip seeker, no block broken or placed.
-     */
-    private void stash(Player player) {
-        PersistentDataContainer pdc = player.getPersistentDataContainer();
-        // getContents() has nulls for empty slots: serialize them as explicit empty stacks.
-        ItemStack[] contents = Arrays.stream(player.getInventory().getContents())
-                .map(item -> item == null ? ItemStack.empty() : item)
-                .toArray(ItemStack[]::new);
-        pdc.set(stashKey, PersistentDataType.BYTE_ARRAY, ItemStack.serializeItemsAsBytes(contents));
-        pdc.set(modeKey, PersistentDataType.STRING, player.getGameMode().name());
+    /** Empties the inventory, and the item cooldowns the kit started with it. */
+    private static void clearKit(Player player) {
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && !item.isEmpty()) {
+                player.setCooldown(item, 0);
+            }
+        }
         player.getInventory().clear();
-        player.setGameMode(GameMode.ADVENTURE);
-    }
-
-    private void unstash(Player player) {
-        PersistentDataContainer pdc = player.getPersistentDataContainer();
-        byte[] raw = pdc.get(stashKey, PersistentDataType.BYTE_ARRAY);
-        if (raw != null) {
-            player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
-            pdc.remove(stashKey);
-        }
-        String mode = pdc.get(modeKey, PersistentDataType.STRING);
-        if (mode != null) {
-            player.setGameMode(GameMode.valueOf(mode));
-            pdc.remove(modeKey);
-        }
     }
 
     private static void seekerKit(Player player) {
+        clearKit(player);
         PlayerInventory inventory = player.getInventory();
-        inventory.clear();
         inventory.setItem(0, item(Material.WOODEN_SWORD, "Seeker's sword"));
         inventory.setItem(1, item(Material.COMPASS, "Sonar (right-click)"));
         inventory.setHeldItemSlot(0);
     }
 
     private static void hiderKit(Player player, BlockData block) {
+        clearKit(player);
         PlayerInventory inventory = player.getInventory();
-        inventory.clear();
         inventory.setItem(0, blockItem(block));
         inventory.setItem(1, item(Material.FIREWORK_ROCKET, "Taunt (right-click)"));
         inventory.setHeldItemSlot(0);
@@ -612,13 +601,18 @@ final class Game implements Listener {
             return;
         }
         int cooldownTicks = plugin.getConfig().getInt("change-cooldown-seconds") * 20;
-        disguise.change(block.getBlockData(), cooldownTicks);
+        BlockData look = block.getBlockData();
+        // A copied waterlogged block would bring its water into the air cell of the fake block.
+        if (look instanceof Waterlogged waterlogged) {
+            waterlogged.setWaterlogged(false);
+        }
+        disguise.change(look, cooldownTicks);
         if (sessions.containsKey(player.getUniqueId())) {
             // Slot 1 shows the new look, with the vanilla cooldown sweep over it.
-            ItemStack look = blockItem(disguise.block());
-            player.getInventory().setItem(0, look);
-            if (!look.isEmpty()) {
-                player.setCooldown(look, cooldownTicks);
+            ItemStack item = blockItem(look);
+            player.getInventory().setItem(0, item);
+            if (!item.isEmpty()) {
+                player.setCooldown(item, cooldownTicks);
             }
         }
         player.sendActionBar(Component.text("You are now " + name(block.getType()) + ".", NamedTextColor.GREEN));
@@ -690,12 +684,14 @@ final class Game implements Listener {
             disguise.hideFrom(event.getPlayer());
         }
         // Left over by a crash mid-game: the game is gone, the inventory comes back.
-        unstash(event.getPlayer());
+        stash.restore(event.getPlayer());
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         drop(event.getPlayer());
+        // Out of the lobby too: the lobby then only ever holds online players.
+        players.remove(event.getPlayer().getUniqueId());
     }
 
     /** The disguise entities stay in the old world: a disguised player who changes world is out. */

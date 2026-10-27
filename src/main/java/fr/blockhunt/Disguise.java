@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Entity;
@@ -160,8 +161,9 @@ final class Disguise {
 
     private void solidify(Location now) {
         Block cell = now.getBlock();
-        // Water, grass, a slab: a full fake block there would look wrong. Keep moving.
-        if (!cell.getType().isAir()) {
+        // Water, grass, a slab: a full fake block there would look wrong. And a hider crouched
+        // over a ledge has their centre above the void: their block would float. Keep moving.
+        if (!cell.getType().isAir() || !cell.getRelative(BlockFace.DOWN).getType().isSolid()) {
             return;
         }
         solid = cell;
