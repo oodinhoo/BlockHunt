@@ -86,6 +86,19 @@ final class Disguise {
         return hitbox.equals(entity);
     }
 
+    BlockData block() {
+        return block;
+    }
+
+    boolean isSolid() {
+        return solid != null;
+    }
+
+    /** From 0 (just moved) to 1 (solid), for the hider's XP bar. */
+    float progress(int solidifyTicks) {
+        return solid != null ? 1f : Math.min(1f, (float) stillTicks / Math.max(1, solidifyTicks));
+    }
+
     int cooldownLeft() {
         return Math.max(0, nextChange - player.getServer().getCurrentTick());
     }

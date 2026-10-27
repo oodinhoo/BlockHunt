@@ -7,30 +7,40 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,17 +56,41 @@ import java.util.concurrent.ThreadLocalRandom;
  * The single game of the server: a lobby of players, then a hiding phase (seekers blinded and
  * frozen), then a seeking phase. A hider found by a seeker becomes a seeker. Seekers win when
  * no hider is left, hiders win when the time runs out.
+ *
+ * <p>Seekers carry a sonar (a sound at every hider) and read the distance to the nearest hider
+ * on their XP bar. Hiders read their progress towards solid on theirs, and can taunt: a loud
+ * sound at their position that takes time off the clock.
  */
 // ponytail: one arena per server. Make Game per-arena, keyed by name, if a server ever needs two.
 final class Game implements Listener {
 
     enum State { LOBBY, HIDING, SEEKING }
 
+    /** Distance at which a seeker's XP bar is empty. */
+    private static final double PROXIMITY_RANGE = 50;
+
+    /** Pause between two taunts, so a double click does not burn both. */
+    private static final int TAUNT_SPAM_TICKS = 200;
+
+    /** A player of the running game. Their own inventory waits in their PDC meanwhile. */
+    private static final class Session {
+        final Sidebar sidebar;
+        int finds;
+        int taunts;
+
+        Session(Sidebar sidebar, int taunts) {
+            this.sidebar = sidebar;
+            this.taunts = taunts;
+        }
+    }
+
     private final BlockHuntPlugin plugin;
+    private final NamespacedKey stashKey;
 
     /** Everyone who joined, in the lobby or in the running game. */
     private final Set<UUID> players = new LinkedHashSet<>();
     private final Set<UUID> seekers = new HashSet<>();
+    private final Map<UUID, Session> sessions = new HashMap<>();
     /** Hiders of the running game, plus anyone disguised with /bh disguise for testing. */
     private final Map<UUID, Disguise> disguises = new HashMap<>();
 
@@ -68,6 +102,7 @@ final class Game implements Listener {
 
     Game(BlockHuntPlugin plugin) {
         this.plugin = plugin;
+        stashKey = new NamespacedKey(plugin, "inventory");
         // Always running: test disguises need ticking outside a game too.
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1, 1);
     }
@@ -123,9 +158,12 @@ final class Game implements Listener {
 
         // Teleport first, while still in the lobby: a world change drops test disguises,
         // it must not count as leaving the game.
+        int taunts = plugin.getConfig().getInt("taunts");
         for (Player player : online) {
             player.teleport(spawn);
             undisguise(player);
+            stash(player);
+            sessions.put(player.getUniqueId(), new Session(new Sidebar(player), taunts));
         }
 
         Collections.shuffle(online);
@@ -136,19 +174,22 @@ final class Game implements Listener {
             player.showBossBar(bar);
             if (i < seekerCount) {
                 seekers.add(player.getUniqueId());
+                seekerKit(player);
                 player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, hideTicks, 0, false, false));
                 player.showTitle(Title.title(Component.text("Seeker", NamedTextColor.RED),
                         Component.text("Wait while they hide...")));
             } else {
                 Material block = blocks.get(ThreadLocalRandom.current().nextInt(blocks.size()));
                 disguise(player, block.createBlockData());
+                hiderKit(player, block.createBlockData());
                 player.showTitle(Title.title(Component.text("Hider", NamedTextColor.GREEN),
-                        Component.text("You are " + block.getKey().getKey() + ". Hide!")));
+                        Component.text("You are " + name(block) + ". Hide!")));
             }
         }
         // Players who joined but are offline do not play.
         players.retainAll(online.stream().map(Player::getUniqueId).toList());
         phase(State.HIDING, hideTicks);
+        updateHud();
     }
 
     /** Test command: toggles a disguise outside of a game. */
@@ -185,10 +226,17 @@ final class Game implements Listener {
         if (state == State.LOBBY) {
             return;
         }
+        // Every tick, or the bar would jump: the hider's XP bar fills up towards solid.
+        for (Disguise disguise : disguises.values()) {
+            if (isHider(disguise.player())) {
+                disguise.player().sendExperienceChange(disguise.progress(solidifyTicks), 0);
+            }
+        }
         ticksLeft--;
         bar.progress(Math.clamp((float) ticksLeft / phaseTicks, 0f, 1f));
         if (ticksLeft % 20 == 0) {
             updateBar();
+            updateHud();
         }
         if (ticksLeft > 0) {
             return;
@@ -219,9 +267,79 @@ final class Game implements Listener {
         bar.name(Component.text(label + " " + time + " - " + hidersLeft() + " hiders left"));
     }
 
+    /** Once a second: sidebars, and the seekers' hot and cold. */
+    private void updateHud() {
+        for (Player player : online(players)) {
+            Session session = sessions.get(player.getUniqueId());
+            if (session == null) {
+                continue;
+            }
+            if (seekers.contains(player.getUniqueId())) {
+                session.sidebar.show(seekerLines(player, session));
+                if (state == State.SEEKING) {
+                    proximity(player);
+                }
+            } else {
+                Disguise disguise = disguises.get(player.getUniqueId());
+                if (disguise != null) {
+                    session.sidebar.show(hiderLines(disguise, session));
+                }
+            }
+        }
+    }
+
+    private List<Sidebar.Line> seekerLines(Player seeker, Session session) {
+        return List.of(
+                new Sidebar.Line("Role", Component.text("Seeker", NamedTextColor.RED)),
+                Sidebar.EMPTY,
+                new Sidebar.Line("Hiders left", Component.text(hidersLeft())),
+                new Sidebar.Line("Seekers", Component.text(seekers.size())),
+                Sidebar.EMPTY,
+                new Sidebar.Line("Your finds", Component.text(session.finds)),
+                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(Material.COMPASS))));
+    }
+
+    private List<Sidebar.Line> hiderLines(Disguise disguise, Session session) {
+        return List.of(
+                new Sidebar.Line("Role", Component.text("Hider", NamedTextColor.GREEN)),
+                Sidebar.EMPTY,
+                new Sidebar.Line("Disguise", Component.text(name(disguise.block().getMaterial()))),
+                new Sidebar.Line("State", disguise.isSolid()
+                        ? Component.text("Solid", NamedTextColor.GREEN)
+                        : Component.text("Moving", NamedTextColor.YELLOW)),
+                new Sidebar.Line("Change", countdown(disguise.cooldownLeft())),
+                Sidebar.EMPTY,
+                new Sidebar.Line("Hiders left", Component.text(hidersLeft())),
+                new Sidebar.Line("Taunts", Component.text(session.taunts)));
+    }
+
+    /** XP level = distance to the nearest hider, bar = how close; the action bar says hot or cold. */
+    private void proximity(Player seeker) {
+        double nearest = Double.MAX_VALUE;
+        for (Disguise disguise : disguises.values()) {
+            Player hider = disguise.player();
+            if (isHider(hider) && hider.getWorld().equals(seeker.getWorld())) {
+                nearest = Math.min(nearest, hider.getLocation().distance(seeker.getLocation()));
+            }
+        }
+        if (nearest == Double.MAX_VALUE) {
+            seeker.sendExperienceChange(0, 0);
+            return;
+        }
+        seeker.sendExperienceChange((float) Math.clamp(1 - nearest / PROXIMITY_RANGE, 0, 1), (int) nearest);
+        seeker.sendActionBar(nearest < 8 ? Component.text("Hot!", NamedTextColor.RED)
+                : nearest < 20 ? Component.text("Warm...", NamedTextColor.GOLD)
+                : Component.text("Cold", NamedTextColor.AQUA));
+    }
+
     private void found(Player hider, Player seeker) {
         undisguise(hider);
         seekers.add(hider.getUniqueId());
+        seekerKit(hider);
+        Session session = sessions.get(seeker.getUniqueId());
+        if (session != null) {
+            session.finds++;
+        }
         hider.showTitle(Title.title(Component.text("Found!", NamedTextColor.RED),
                 Component.text("You are a seeker now.")));
         broadcast(Component.text(seeker.getName() + " found " + hider.getName() + "!", NamedTextColor.GOLD));
@@ -229,7 +347,51 @@ final class Game implements Listener {
             player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
         }
         updateBar();
+        updateHud();
         checkEnd();
+    }
+
+    /** Every hider rings at their own position, heard by this seeker only. */
+    private void sonar(Player seeker, ItemStack compass) {
+        if (state != State.SEEKING) {
+            deny(seeker, "The sonar works once seekers are released.");
+            return;
+        }
+        if (seeker.hasCooldown(compass)) {
+            deny(seeker, "Sonar recharging.");
+            return;
+        }
+        for (Disguise disguise : disguises.values()) {
+            if (isHider(disguise.player())) {
+                // Volume 4: heard up to 64 blocks away.
+                seeker.playSound(disguise.player().getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 4.0f, 1.0f);
+            }
+        }
+        seeker.setCooldown(compass, plugin.getConfig().getInt("sonar-cooldown-seconds") * 20);
+    }
+
+    /** A loud sound at the hider's position, paid back by time off the clock. */
+    private void taunt(Player hider, ItemStack rocket) {
+        Session session = sessions.get(hider.getUniqueId());
+        if (state != State.SEEKING || session == null) {
+            deny(hider, "Taunts work once seekers are released.");
+            return;
+        }
+        if (session.taunts <= 0) {
+            deny(hider, "No taunt left.");
+            return;
+        }
+        if (hider.hasCooldown(rocket)) {
+            return;
+        }
+        session.taunts--;
+        hider.setCooldown(rocket, TAUNT_SPAM_TICKS);
+        hider.getWorld().playSound(hider.getLocation(), Sound.ENTITY_GOAT_SCREAMING_AMBIENT, 2.0f, 1.0f);
+        int seconds = plugin.getConfig().getInt("taunt-seconds");
+        ticksLeft = Math.max(20, ticksLeft - seconds * 20);
+        broadcast(Component.text(hider.getName() + " taunted the seekers: -" + seconds + "s!", NamedTextColor.LIGHT_PURPLE));
+        updateBar();
+        updateHud();
     }
 
     private void checkEnd() {
@@ -250,17 +412,34 @@ final class Game implements Listener {
             player.showTitle(Title.title(result, Component.empty()));
         }
         seekers.clear();
+        sessions.clear();
         state = State.LOBBY;
     }
 
+    /** Gives back everything the game took: look, inventory, scoreboard, XP bar. */
     private void reset(Player player) {
         undisguise(player);
         player.removePotionEffect(PotionEffectType.BLINDNESS);
         player.hideBossBar(bar);
+        Session session = sessions.remove(player.getUniqueId());
+        if (session != null) {
+            session.sidebar.remove();
+        }
+        unstash(player);
+        // The XP bar was only ever faked on the client: resend the real one.
+        player.sendExperienceChange(player.getExp(), player.getLevel());
     }
 
     private int hidersLeft() {
         return players.size() - seekers.size();
+    }
+
+    private boolean playing(Player player) {
+        return state != State.LOBBY && players.contains(player.getUniqueId());
+    }
+
+    private boolean isHider(Player player) {
+        return playing(player) && !seekers.contains(player.getUniqueId());
     }
 
     private void disguise(Player player, BlockData block) {
@@ -275,8 +454,62 @@ final class Game implements Listener {
         }
     }
 
-    private boolean playing(Player player) {
-        return state != State.LOBBY && players.contains(player.getUniqueId());
+    // --- Inventories ----------------------------------------------------------
+
+    /**
+     * Moves the player's inventory into their own PDC, saved with their player data: a crash
+     * mid-game gives it back on their next join instead of losing it.
+     */
+    private void stash(Player player) {
+        // getContents() has nulls for empty slots: serialize them as explicit empty stacks.
+        ItemStack[] contents = Arrays.stream(player.getInventory().getContents())
+                .map(item -> item == null ? ItemStack.empty() : item)
+                .toArray(ItemStack[]::new);
+        player.getPersistentDataContainer().set(stashKey, PersistentDataType.BYTE_ARRAY,
+                ItemStack.serializeItemsAsBytes(contents));
+        player.getInventory().clear();
+    }
+
+    private void unstash(Player player) {
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        byte[] raw = pdc.get(stashKey, PersistentDataType.BYTE_ARRAY);
+        if (raw == null) {
+            return;
+        }
+        player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
+        pdc.remove(stashKey);
+    }
+
+    private static void seekerKit(Player player) {
+        PlayerInventory inventory = player.getInventory();
+        inventory.clear();
+        inventory.setItem(0, item(Material.WOODEN_SWORD, "Seeker's sword"));
+        inventory.setItem(1, item(Material.COMPASS, "Sonar (right-click)"));
+        inventory.setHeldItemSlot(0);
+    }
+
+    private static void hiderKit(Player player, BlockData block) {
+        PlayerInventory inventory = player.getInventory();
+        inventory.clear();
+        inventory.setItem(0, blockItem(block));
+        inventory.setItem(1, item(Material.FIREWORK_ROCKET, "Taunt (right-click)"));
+        inventory.setHeldItemSlot(0);
+    }
+
+    /** The hider's current look in slot 1. Some blocks have no item form: the slot stays empty. */
+    private static ItemStack blockItem(BlockData block) {
+        Material material = block.getMaterial();
+        return material.isItem() ? item(material, "Disguise: " + name(material)) : ItemStack.empty();
+    }
+
+    private static ItemStack item(Material material, String name) {
+        ItemStack item = ItemStack.of(material);
+        item.editMeta(meta -> meta.itemName(Component.text(name)));
+        return item;
+    }
+
+    private static String name(Material material) {
+        return material.getKey().getKey().replace('_', ' ');
     }
 
     // --- Events ---------------------------------------------------------------
@@ -306,19 +539,39 @@ final class Game implements Listener {
         }
     }
 
-    /** A disguised player right-clicking a block of the map takes its look, once per cooldown. */
-    // Not ignoreCancelled: arenas are often protected, and a protection plugin denying the click
-    // must not block the copy, which changes nothing in the world.
+    /**
+     * Seeker with the compass: sonar. Hider with the rocket: taunt. Disguised player clicking a
+     * block of the map: takes its look, once per cooldown.
+     */
+    // Not ignoreCancelled: a click in the air always arrives cancelled, and arenas are often
+    // protected, while none of this changes anything in the world.
     @EventHandler(priority = EventPriority.HIGH)
     public void onRightClick(PlayerInteractEvent event) {
         // PlayerInteractEvent fires twice per click: main hand, then off hand.
-        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
+        }
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_AIR) {
             return;
         }
         Player player = event.getPlayer();
+        ItemStack inHand = player.getInventory().getItemInMainHand();
+        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == Material.COMPASS) {
+            event.setCancelled(true);
+            sonar(player, inHand);
+            return;
+        }
         Disguise disguise = disguises.get(player.getUniqueId());
+        if (disguise == null) {
+            return;
+        }
+        if (isHider(player) && inHand.getType() == Material.FIREWORK_ROCKET) {
+            event.setCancelled(true);
+            taunt(player, inHand);
+            return;
+        }
         Block block = event.getClickedBlock();
-        if (disguise == null || block == null) {
+        if (block == null) {
             return;
         }
         event.setCancelled(true);
@@ -333,8 +586,17 @@ final class Game implements Listener {
             deny(player, "You cannot copy this block.");
             return;
         }
-        disguise.change(block.getBlockData(), plugin.getConfig().getInt("change-cooldown-seconds") * 20);
-        player.sendActionBar(Component.text("You are now " + block.getType().getKey().getKey() + ".", NamedTextColor.GREEN));
+        int cooldownTicks = plugin.getConfig().getInt("change-cooldown-seconds") * 20;
+        disguise.change(block.getBlockData(), cooldownTicks);
+        if (sessions.containsKey(player.getUniqueId())) {
+            // Slot 1 shows the new look, with the vanilla cooldown sweep over it.
+            ItemStack look = blockItem(disguise.block());
+            player.getInventory().setItem(0, look);
+            if (!look.isEmpty()) {
+                player.setCooldown(look, cooldownTicks);
+            }
+        }
+        player.sendActionBar(Component.text("You are now " + name(block.getType()) + ".", NamedTextColor.GREEN));
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -372,11 +634,42 @@ final class Game implements Listener {
         }
     }
 
+    // The kit stays where it is: no moving, dropping, swapping or picking up during a game.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && playing(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDrop(PlayerDropItemEvent event) {
+        if (playing(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onSwapHands(PlayerSwapHandItemsEvent event) {
+        if (playing(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player && playing(player)) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         for (Disguise disguise : disguises.values()) {
             disguise.hideFrom(event.getPlayer());
         }
+        // Left over by a crash mid-game: the game is gone, the inventory comes back.
+        unstash(event.getPlayer());
     }
 
     @EventHandler
@@ -410,6 +703,12 @@ final class Game implements Listener {
         for (Player player : online(players)) {
             player.sendMessage(message);
         }
+    }
+
+    private static Component countdown(int ticks) {
+        return ticks <= 0
+                ? Component.text("ready", NamedTextColor.GREEN)
+                : Component.text((ticks + 19) / 20 + "s", NamedTextColor.GRAY);
     }
 
     private static void deny(Player player, String message) {

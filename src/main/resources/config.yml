@@ -10,6 +10,13 @@ change-cooldown-seconds: 30
 
 seekers: 1
 
+# Seekers' compass: right-click rings a bell at every hider's position.
+sonar-cooldown-seconds: 45
+
+# Hiders' rocket: a loud sound at their position, paid back by time off the clock.
+taunts: 2
+taunt-seconds: 15
+
 # Each hider gets one at random. Full blocks only: the fake block fills the whole cell.
 blocks:
   - OAK_PLANKS
