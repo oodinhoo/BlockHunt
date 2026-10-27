@@ -5,10 +5,13 @@ import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
+import org.bukkit.GameMode;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
@@ -18,14 +21,13 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -86,6 +88,7 @@ final class Game implements Listener {
 
     private final BlockHuntPlugin plugin;
     private final NamespacedKey stashKey;
+    private final NamespacedKey modeKey;
 
     /** Everyone who joined, in the lobby or in the running game. */
     private final Set<UUID> players = new LinkedHashSet<>();
@@ -99,10 +102,14 @@ final class Game implements Listener {
     private State state = State.LOBBY;
     private int ticksLeft;
     private int phaseTicks;
+    /** World of the running game, and its reducedDebugInfo rule before the game. */
+    private World arena;
+    private Boolean debugInfoBefore;
 
     Game(BlockHuntPlugin plugin) {
         this.plugin = plugin;
         stashKey = new NamespacedKey(plugin, "inventory");
+        modeKey = new NamespacedKey(plugin, "gamemode");
         // Always running: test disguises need ticking outside a game too.
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1, 1);
     }
@@ -155,6 +162,13 @@ final class Game implements Listener {
             sender.sendMessage(Component.text("No valid block in config.yml.", NamedTextColor.RED));
             return;
         }
+
+        // F3+B draws every Interaction hitbox, so every hider: reduced debug info turns it off.
+        // ponytail: per world, there is no per-player API. A crash mid-game leaves the rule on
+        // in the arena: harmless, /gamerule reducedDebugInfo false puts it back.
+        arena = spawn.getWorld();
+        debugInfoBefore = arena.getGameRuleValue(GameRules.REDUCED_DEBUG_INFO);
+        arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, true);
 
         // Teleport first, while still in the lobby: a world change drops test disguises,
         // it must not count as leaving the game.
@@ -414,6 +428,10 @@ final class Game implements Listener {
         seekers.clear();
         sessions.clear();
         state = State.LOBBY;
+        if (arena != null) {
+            arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, debugInfoBefore);
+            arena = null;
+        }
     }
 
     /** Gives back everything the game took: look, inventory, scoreboard, XP bar. */
@@ -457,27 +475,34 @@ final class Game implements Listener {
     // --- Inventories ----------------------------------------------------------
 
     /**
-     * Moves the player's inventory into their own PDC, saved with their player data: a crash
-     * mid-game gives it back on their next join instead of losing it.
+     * Moves the player's inventory and game mode into their own PDC, saved with their player
+     * data: a crash mid-game gives them back on their next join instead of losing them.
+     * Adventure mode for the game: no flying hider, no noclip seeker, no block broken or placed.
      */
     private void stash(Player player) {
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
         // getContents() has nulls for empty slots: serialize them as explicit empty stacks.
         ItemStack[] contents = Arrays.stream(player.getInventory().getContents())
                 .map(item -> item == null ? ItemStack.empty() : item)
                 .toArray(ItemStack[]::new);
-        player.getPersistentDataContainer().set(stashKey, PersistentDataType.BYTE_ARRAY,
-                ItemStack.serializeItemsAsBytes(contents));
+        pdc.set(stashKey, PersistentDataType.BYTE_ARRAY, ItemStack.serializeItemsAsBytes(contents));
+        pdc.set(modeKey, PersistentDataType.STRING, player.getGameMode().name());
         player.getInventory().clear();
+        player.setGameMode(GameMode.ADVENTURE);
     }
 
     private void unstash(Player player) {
         PersistentDataContainer pdc = player.getPersistentDataContainer();
         byte[] raw = pdc.get(stashKey, PersistentDataType.BYTE_ARRAY);
-        if (raw == null) {
-            return;
+        if (raw != null) {
+            player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
+            pdc.remove(stashKey);
         }
-        player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
-        pdc.remove(stashKey);
+        String mode = pdc.get(modeKey, PersistentDataType.STRING);
+        if (mode != null) {
+            player.setGameMode(GameMode.valueOf(mode));
+            pdc.remove(modeKey);
+        }
     }
 
     private static void seekerKit(Player player) {
@@ -522,6 +547,11 @@ final class Game implements Listener {
         Disguise target = disguises.values().stream()
                 .filter(disguise -> disguise.owns(event.getAttacked())).findFirst().orElse(null);
         if (target == null) {
+            // Frames, armor stands, animals: a seeker swinging at everything must not wreck the
+            // map, and a hidden hider hitting a mob would give their position away.
+            if (playing(event.getPlayer())) {
+                event.setCancelled(true);
+            }
             return;
         }
 
@@ -615,15 +645,11 @@ final class Game implements Listener {
         }
     }
 
+    // An item taken from a frame or an armor stand would land in the kit inventory, which the
+    // end-of-game restore overwrites: the item would be gone for good. Also covers the "at"
+    // variant, which shares this handler list, and so armor stand manipulation that follows it.
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onBreak(BlockBreakEvent event) {
-        if (playing(event.getPlayer())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPlace(BlockPlaceEvent event) {
+    public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (playing(event.getPlayer())) {
             event.setCancelled(true);
         }
