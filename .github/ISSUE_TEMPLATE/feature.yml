@@ -1,0 +1,15 @@
+name: Feature request
+description: A behavior, command or display to add
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need, and why
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: How it would play
+      description: What players or admins would do and see.

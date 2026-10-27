@@ -15,6 +15,27 @@ repositories {
 dependencies {
     // 26.x coordinate: no more "-R0.1-SNAPSHOT", the format is <version>.build.<number>-<stage>.
     compileOnly("io.papermc.paper:paper-api:26.2.build.135-stable")
+
+    testImplementation("io.papermc.paper:paper-api:26.2.build.135-stable")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.2:4.117.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // MockBukkit aborts a test that reaches a method it does not implement: JUnit reports it as
+    // skipped, not failed. A skipped test proves nothing, so it fails the build.
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(test: TestDescriptor) {}
+        override fun afterTest(test: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null && result.skippedTestCount > 0) {
+                throw GradleException("${result.skippedTestCount} test(s) skipped: see the test report.")
+            }
+        }
+    })
 }
 
 java {

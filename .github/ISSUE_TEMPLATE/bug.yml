@@ -1,0 +1,48 @@
+name: Bug report
+description: Hider not found, broken game flow, inventory not given back, error in the server console
+labels: [bug]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before posting
+      options:
+        - label: I am on the latest release, and its Paper version matches my server's.
+          required: true
+        - label: This is not a security problem (those go through the private report, see SECURITY.md).
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: Output of `/version BlockHunt`
+    validations:
+      required: true
+  - type: input
+    id: paper
+    attributes:
+      label: Paper version
+      description: Output of `/version`
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. /bh join with two players, then /bh start
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: The error and its stack trace, if any.
+      render: text
