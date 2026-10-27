@@ -1,0 +1,15 @@
+name: BlockHunt
+version: '${version}'
+main: fr.blockhunt.BlockHuntPlugin
+api-version: '26.2'
+description: Hide and seek where hiders are disguised as blocks.
+authors:
+  - Odinho
+
+permissions:
+  blockhunt.play:
+    description: Allows joining and leaving games.
+    default: true
+  blockhunt.admin:
+    description: Allows starting games, setting the spawn and testing disguises.
+    default: op
