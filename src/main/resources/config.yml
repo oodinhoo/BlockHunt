@@ -1,0 +1,22 @@
+# Seekers are blinded and frozen while hiders run.
+hide-seconds: 30
+seek-seconds: 300
+
+# A hider standing still this long turns into a real-looking block.
+solidify-seconds: 3
+
+seekers: 1
+
+# Each hider gets one at random. Full blocks only: the fake block fills the whole cell.
+blocks:
+  - OAK_PLANKS
+  - STONE
+  - COBBLESTONE
+  - BOOKSHELF
+  - HAY_BLOCK
+  - CRAFTING_TABLE
+  - PUMPKIN
+  - MELON
+
+# Arena spawn, written in game by /bh setspawn.
+# spawn:
