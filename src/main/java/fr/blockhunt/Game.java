@@ -519,13 +519,8 @@ final class Game implements Listener {
     // hitboxes are handled here, which no protection plugin has a reason to guard.
     @EventHandler(priority = EventPriority.HIGH)
     public void onAttack(PrePlayerAttackEntityEvent event) {
-        Disguise target = null;
-        for (Disguise disguise : disguises.values()) {
-            if (disguise.owns(event.getAttacked())) {
-                target = disguise;
-                break;
-            }
-        }
+        Disguise target = disguises.values().stream()
+                .filter(disguise -> disguise.owns(event.getAttacked())).findFirst().orElse(null);
         if (target == null) {
             return;
         }
