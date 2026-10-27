@@ -76,14 +76,18 @@ final class Game implements Listener {
     /** Pause between two taunts, so a double click does not burn both. */
     private static final int TAUNT_SPAM_TICKS = 200;
 
+    /** Players needed to start a game: one seeker, one hider. */
+    private static final int MIN_PLAYERS = 2;
+
+    /** Names listed on the lobby sidebar, which shows 15 lines at most: past that, a count. */
+    private static final int LISTED_NAMES = 6;
+
     /** A player of the running game. Their own inventory waits in their PDC meanwhile. */
     private static final class Session {
-        final Sidebar sidebar;
         int finds;
         int taunts;
 
-        Session(Sidebar sidebar, int taunts) {
-            this.sidebar = sidebar;
+        Session(int taunts) {
             this.taunts = taunts;
         }
     }
@@ -95,6 +99,8 @@ final class Game implements Listener {
     private final Set<UUID> players = new LinkedHashSet<>();
     private final Set<UUID> seekers = new HashSet<>();
     private final Map<UUID, Session> sessions = new HashMap<>();
+    /** One per joined player, from /bh join to leaving: the lobby, then their role in a game. */
+    private final Map<UUID, Sidebar> sidebars = new HashMap<>();
     /** Hiders of the running game, plus anyone disguised with /bh disguise for testing. */
     private final Map<UUID, Disguise> disguises = new HashMap<>();
 
@@ -121,9 +127,15 @@ final class Game implements Listener {
             deny(player, "A game is running. Wait for the next one.");
             return;
         }
-        if (players.add(player.getUniqueId())) {
-            broadcast(Component.text(player.getName() + " joined (" + players.size() + " players).", NamedTextColor.AQUA));
+        if (!players.add(player.getUniqueId())) {
+            deny(player, "You already joined.");
+            return;
         }
+        sidebars.put(player.getUniqueId(), new Sidebar(player));
+        player.showTitle(Title.title(Component.text("BlockHunt", NamedTextColor.GOLD),
+                Component.text("You joined the lobby: " + players.size() + " players")));
+        broadcast(Component.text(player.getName() + " joined (" + players.size() + " players).", NamedTextColor.AQUA));
+        updateHud();
     }
 
     void leave(Player player) {
@@ -135,7 +147,16 @@ final class Game implements Listener {
         if (state != State.LOBBY) {
             reset(player);
             seekers.remove(player.getUniqueId());
-            checkEnd();
+        }
+        removeSidebar(player);
+        checkEnd();
+        updateHud();
+    }
+
+    /** After /bh setspawn: the lobby status may change from "No spawn set". */
+    void refreshLobby() {
+        if (state == State.LOBBY) {
+            updateHud();
         }
     }
 
@@ -144,8 +165,8 @@ final class Game implements Listener {
             sender.sendMessage(Component.text("A game is already running.", NamedTextColor.RED));
             return;
         }
-        if (players.size() < 2) {
-            sender.sendMessage(Component.text("At least 2 players must /bh join.", NamedTextColor.RED));
+        if (players.size() < MIN_PLAYERS) {
+            sender.sendMessage(Component.text("At least " + MIN_PLAYERS + " players must /bh join.", NamedTextColor.RED));
             return;
         }
         Location spawn = plugin.getConfig().getLocation("spawn");
@@ -171,11 +192,13 @@ final class Game implements Listener {
                 online.add(player);
             } else {
                 players.remove(player.getUniqueId());
+                removeSidebar(player);
                 deny(player, "Could not reach the arena: you are out of this game.");
             }
         }
-        if (online.size() < 2) {
+        if (online.size() < MIN_PLAYERS) {
             sender.sendMessage(Component.text("Not enough players reached the arena.", NamedTextColor.RED));
+            updateHud();
             return;
         }
 
@@ -190,7 +213,7 @@ final class Game implements Listener {
         for (Player player : online) {
             undisguise(player);
             stash.save(player);
-            sessions.put(player.getUniqueId(), new Session(new Sidebar(player), taunts));
+            sessions.put(player.getUniqueId(), new Session(taunts));
         }
         assignRoles(online, blocks);
     }
@@ -243,6 +266,9 @@ final class Game implements Listener {
         for (Disguise disguise : List.copyOf(disguises.values())) {
             undisguise(disguise.player());
         }
+        for (Player player : online(players)) {
+            removeSidebar(player);
+        }
     }
 
     // --- Game loop ------------------------------------------------------------
@@ -289,31 +315,68 @@ final class Game implements Listener {
     }
 
     private void updateBar() {
-        int seconds = Math.max(0, ticksLeft / 20);
-        String time = seconds / 60 + ":" + String.format("%02d", seconds % 60);
         String label = state == State.HIDING ? "Hiding" : "Seeking";
-        bar.name(Component.text(label + " " + time + " - " + hidersLeft() + " hiders left"));
+        bar.name(Component.text(label + " " + clock(ticksLeft / 20) + " - " + hidersLeft() + " hiders left"));
     }
 
-    /** Once a second: sidebars, and the seekers' hot and cold. */
+    /** 75 -> "1:15". */
+    private static String clock(int seconds) {
+        seconds = Math.max(0, seconds);
+        return seconds / 60 + ":" + String.format("%02d", seconds % 60);
+    }
+
+    /** Sidebars and the seekers' hot and cold: once a second in a game, on every change in the lobby. */
     private void updateHud() {
         for (Player player : online(players)) {
+            Sidebar sidebar = sidebars.get(player.getUniqueId());
             Session session = sessions.get(player.getUniqueId());
-            if (session == null) {
+            if (sidebar == null) {
                 continue;
             }
-            if (seekers.contains(player.getUniqueId())) {
-                session.sidebar.show(seekerLines(player, session));
+            if (session == null) {
+                sidebar.show(lobbyLines());
+            } else if (seekers.contains(player.getUniqueId())) {
+                sidebar.show(seekerLines(player, session));
                 if (state == State.SEEKING) {
                     proximity(player);
                 }
             } else {
                 Disguise disguise = disguises.get(player.getUniqueId());
                 if (disguise != null) {
-                    session.sidebar.show(hiderLines(disguise, session));
+                    sidebar.show(hiderLines(disguise, session));
                 }
             }
         }
+    }
+
+    private List<Sidebar.Line> lobbyLines() {
+        List<Sidebar.Line> lines = new ArrayList<>();
+        lines.add(new Sidebar.Line("Status", lobbyStatus()));
+        lines.add(new Sidebar.Line("Players", Component.text(players.size())));
+        lines.add(Sidebar.EMPTY);
+        List<Player> joined = online(players);
+        for (int i = 0; i < joined.size(); i++) {
+            if (i == LISTED_NAMES - 1 && joined.size() > LISTED_NAMES) {
+                lines.add(new Sidebar.Line("and " + (joined.size() - i) + " more", Component.empty()));
+                break;
+            }
+            lines.add(new Sidebar.Line(joined.get(i).getName(), Component.empty()));
+        }
+        lines.add(Sidebar.EMPTY);
+        lines.add(new Sidebar.Line("Hiding", Component.text(clock(plugin.getConfig().getInt("hide-seconds")))));
+        lines.add(new Sidebar.Line("Seeking", Component.text(clock(plugin.getConfig().getInt("seek-seconds")))));
+        lines.add(new Sidebar.Line("Leave", Component.text("/bh leave", NamedTextColor.GRAY)));
+        return lines;
+    }
+
+    private Component lobbyStatus() {
+        if (plugin.getConfig().getLocation("spawn") == null) {
+            return Component.text("No spawn set", NamedTextColor.RED);
+        }
+        int missing = MIN_PLAYERS - players.size();
+        return missing > 0
+                ? Component.text("Need " + missing + " more", NamedTextColor.YELLOW)
+                : Component.text("Ready", NamedTextColor.GREEN);
     }
 
     private List<Sidebar.Line> seekerLines(Player seeker, Session session) {
@@ -446,22 +509,28 @@ final class Game implements Listener {
             arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, debugInfoBefore);
             arena = null;
         }
+        updateHud();
     }
 
-    /** Gives back everything the game took: look, inventory, scoreboard, XP bar. */
+    /** Gives back everything the game took: look, inventory, game mode, XP bar. */
     private void reset(Player player) {
         undisguise(player);
         player.removePotionEffect(PotionEffectType.BLINDNESS);
         player.hideBossBar(bar);
-        Session session = sessions.remove(player.getUniqueId());
-        if (session != null) {
-            session.sidebar.remove();
-        }
+        sessions.remove(player.getUniqueId());
         // Or the sonar, taunt or block cooldowns would follow the player out of the game.
         clearKit(player);
         stash.restore(player);
         // The XP bar was only ever faked on the client: resend the real one.
         player.sendExperienceChange(player.getExp(), player.getLevel());
+    }
+
+    /** Out of the lobby: back to the scoreboard the player had before joining. */
+    private void removeSidebar(Player player) {
+        Sidebar sidebar = sidebars.remove(player.getUniqueId());
+        if (sidebar != null) {
+            sidebar.remove();
+        }
     }
 
     private int hidersLeft() {
@@ -697,7 +766,10 @@ final class Game implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         drop(event.getPlayer());
         // Out of the lobby too: the lobby then only ever holds online players.
-        players.remove(event.getPlayer().getUniqueId());
+        if (players.remove(event.getPlayer().getUniqueId())) {
+            removeSidebar(event.getPlayer());
+            updateHud();
+        }
     }
 
     /** The disguise entities stay in the old world: a disguised player who changes world is out. */

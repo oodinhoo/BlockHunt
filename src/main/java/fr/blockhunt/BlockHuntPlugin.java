@@ -67,6 +67,7 @@ public final class BlockHuntPlugin extends JavaPlugin {
         getConfig().set("spawn", player.getLocation());
         saveConfig();
         player.sendActionBar(Component.text("Arena spawn set.", NamedTextColor.AQUA));
+        game.refreshLobby();
     }
 
     private static int asPlayer(CommandContext<CommandSourceStack> context, Consumer<Player> action) {
