@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Entity;
@@ -39,7 +40,9 @@ final class Disguise {
 
     private final Plugin plugin;
     private final Player player;
-    private final BlockData block;
+    private BlockData block;
+    /** Server tick from which the look can change again. */
+    private int nextChange;
     private final BlockDisplay display;
     private final Interaction hitbox;
 
@@ -82,6 +85,33 @@ final class Disguise {
 
     boolean owns(Entity entity) {
         return hitbox.equals(entity);
+    }
+
+    BlockData block() {
+        return block;
+    }
+
+    boolean isSolid() {
+        return solid != null;
+    }
+
+    /** From 0 (just moved) to 1 (solid), for the hider's XP bar. */
+    float progress(int solidifyTicks) {
+        return solid != null ? 1f : Math.min(1f, (float) stillTicks / Math.max(1, solidifyTicks));
+    }
+
+    int cooldownLeft() {
+        return Math.max(0, nextChange - player.getServer().getCurrentTick());
+    }
+
+    /** New look, effective at once even while solid. */
+    void change(BlockData newBlock, int cooldownTicks) {
+        block = newBlock;
+        nextChange = player.getServer().getCurrentTick() + cooldownTicks;
+        display.setBlock(newBlock);
+        if (solid != null) {
+            sendFake();
+        }
     }
 
     /** Also called for players who join after the disguise was applied. */
@@ -129,11 +159,18 @@ final class Disguise {
         }
     }
 
+    /**
+     * Water, grass, a slab: a full fake block there would look wrong. And a hider crouched over
+     * a ledge has their centre above the void: their block would float.
+     */
+    static boolean canSolidifyAt(Block cell) {
+        return cell.getType().isAir() && cell.getRelative(BlockFace.DOWN).getType().isSolid();
+    }
+
     private void solidify(Location now) {
         Block cell = now.getBlock();
-        // Water, grass, a slab: a full fake block there would look wrong. Keep moving.
-        if (!cell.getType().isAir()) {
-            return;
+        if (!canSolidifyAt(cell)) {
+            return; // keep moving
         }
         solid = cell;
         anchor = now;

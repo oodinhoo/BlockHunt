@@ -21,7 +21,6 @@ import java.util.function.Consumer;
  */
 public final class BlockHuntPlugin extends JavaPlugin {
 
-    private static final String PLAY = "blockhunt.play";
     private static final String ADMIN = "blockhunt.admin";
 
     private Game game;
@@ -35,10 +34,8 @@ public final class BlockHuntPlugin extends JavaPlugin {
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar().register(
                 Commands.literal("blockhunt")
                         .then(Commands.literal("join")
-                                .requires(source -> source.getSender().hasPermission(PLAY))
                                 .executes(context -> asPlayer(context, game::join)))
                         .then(Commands.literal("leave")
-                                .requires(source -> source.getSender().hasPermission(PLAY))
                                 .executes(context -> asPlayer(context, game::leave)))
                         .then(Commands.literal("start")
                                 .requires(source -> source.getSender().hasPermission(ADMIN))

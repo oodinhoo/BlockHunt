@@ -4,6 +4,24 @@ out/
 *.iml
 .idea/
 .vscode/
+.classpath
+.project
+.settings/
+bin/
 
 # Local Paper test server (run-paper)
 run/
+
+# System
+.DS_Store
+Thumbs.db
+*.log
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Private agent files
+CLAUDE.md
+AGENTS.md
+CONTEXT.md
+docs/carnet-de-lecon.md

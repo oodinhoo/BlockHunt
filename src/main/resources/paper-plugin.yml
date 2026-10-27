@@ -7,9 +7,6 @@ authors:
   - Odinho
 
 permissions:
-  blockhunt.play:
-    description: Allows joining and leaving games.
-    default: true
   blockhunt.admin:
     description: Allows starting games, setting the spawn and testing disguises.
     default: op
