@@ -159,12 +159,18 @@ final class Disguise {
         }
     }
 
+    /**
+     * Water, grass, a slab: a full fake block there would look wrong. And a hider crouched over
+     * a ledge has their centre above the void: their block would float.
+     */
+    static boolean canSolidifyAt(Block cell) {
+        return cell.getType().isAir() && cell.getRelative(BlockFace.DOWN).getType().isSolid();
+    }
+
     private void solidify(Location now) {
         Block cell = now.getBlock();
-        // Water, grass, a slab: a full fake block there would look wrong. And a hider crouched
-        // over a ledge has their centre above the void: their block would float. Keep moving.
-        if (!cell.getType().isAir() || !cell.getRelative(BlockFace.DOWN).getType().isSolid()) {
-            return;
+        if (!canSolidifyAt(cell)) {
+            return; // keep moving
         }
         solid = cell;
         anchor = now;

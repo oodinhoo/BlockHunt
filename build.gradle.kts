@@ -24,6 +24,18 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // MockBukkit aborts a test that reaches a method it does not implement: JUnit reports it as
+    // skipped, not failed. A skipped test proves nothing, so it fails the build.
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(test: TestDescriptor) {}
+        override fun afterTest(test: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null && result.skippedTestCount > 0) {
+                throw GradleException("${result.skippedTestCount} test(s) skipped: see the test report.")
+            }
+        }
+    })
 }
 
 java {
