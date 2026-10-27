@@ -53,7 +53,8 @@ You are invisible: the others only see the block you are disguised as, following
 ## Playing as a seeker
 
 - **Hit a suspicious block.** If it is a hider, they are found and join the seekers.
-- **Sonar** (compass, slot 2): right-click to hear a bell at every hider's position. Every 45 seconds.
+- **Sonar** (recovery compass, slot 2): right-click to hear a bell at every hider's position. Every
+  45 seconds. Not a plain compass, which WorldEdit uses as its teleport wand.
 - **Hot or cold**: your XP level is the distance to the nearest hider, the action bar says *Hot!*,
   *Warm...* or *Cold*.
 

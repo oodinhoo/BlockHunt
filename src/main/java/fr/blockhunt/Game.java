@@ -67,6 +67,12 @@ final class Game implements Listener {
     /** Distance at which a seeker's XP bar is empty. */
     private static final double PROXIMITY_RANGE = 50;
 
+    /**
+     * The seekers' sonar. Not a plain compass: it is WorldEdit's default navigation wand, whose
+     * right-click teleports the player before this plugin even sees the click.
+     */
+    private static final Material SONAR = Material.RECOVERY_COMPASS;
+
     /** Pause between two taunts, so a double click does not burn both. */
     private static final int TAUNT_SPAM_TICKS = 200;
 
@@ -318,7 +324,7 @@ final class Game implements Listener {
                 new Sidebar.Line("Seekers", Component.text(seekers.size())),
                 Sidebar.EMPTY,
                 new Sidebar.Line("Your finds", Component.text(session.finds)),
-                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(Material.COMPASS))));
+                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(SONAR))));
     }
 
     private List<Sidebar.Line> hiderLines(Disguise disguise, Session session) {
@@ -498,7 +504,7 @@ final class Game implements Listener {
         clearKit(player);
         PlayerInventory inventory = player.getInventory();
         inventory.setItem(0, item(Material.WOODEN_SWORD, "Seeker's sword"));
-        inventory.setItem(1, item(Material.COMPASS, "Sonar (right-click)"));
+        inventory.setItem(1, item(SONAR, "Sonar (right-click)"));
         inventory.setHeldItemSlot(0);
     }
 
@@ -554,7 +560,7 @@ final class Game implements Listener {
     }
 
     /**
-     * Seeker with the compass: sonar. Hider with the rocket: taunt. Disguised player clicking a
+     * Seeker with the sonar: rings at every hider. Hider with the rocket: taunt. Disguised player clicking a
      * block of the map: takes its look, once per cooldown.
      */
     // Not ignoreCancelled: a click in the air always arrives cancelled, and arenas are often
@@ -570,7 +576,7 @@ final class Game implements Listener {
         }
         Player player = event.getPlayer();
         ItemStack inHand = player.getInventory().getItemInMainHand();
-        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == Material.COMPASS) {
+        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == SONAR) {
             event.setCancelled(true);
             sonar(player, inHand);
             return;
