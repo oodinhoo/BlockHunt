@@ -7,7 +7,7 @@ and become indistinguishable from the map. Seekers hit suspicious blocks to find
 is found joins the seekers. Seekers win when nobody is left hiding, hiders win when the clock runs
 out.
 
-![BlockHunt: a hider turns into a block, snaps onto the grid and copies a bookshelf, a seeker finds them, the sonar and the hot or cold bar, a taunt](docs/blockhunt.gif)
+![BlockHunt: a hider turns into a block, snaps onto the grid and copies a bookshelf, a seeker finds them, the sonar and the hot or cold bar, a taunt near a seeker, the arena dome](docs/blockhunt.gif)
 
 ## Building
 
