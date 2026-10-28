@@ -20,8 +20,9 @@ sonar-cooldown-seconds: 45
 
 # Hiders' rocket: a loud sound at their position, paid back by time off the clock.
 taunts: 2
-# The closer to a seeker, the more: taunt-max-seconds right next to one, down in a straight line
-# to nothing at taunt-range blocks. Farther than that, a taunt is refused and kept.
+# The closer to a seeker, the more: taunt-max-seconds right next to one, then down evenly to
+# nothing at taunt-range blocks (as the crow flies, through walls). A taunt that would take nothing
+# off is refused and kept. 0 for either key turns taunts off.
 taunt-max-seconds: 30
 taunt-range: 32
 

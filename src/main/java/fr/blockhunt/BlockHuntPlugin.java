@@ -28,6 +28,10 @@ public final class BlockHuntPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        // Replaced by taunt-max-seconds and taunt-range: a tuned value would be ignored without a word.
+        if (getConfig().isSet("taunt-seconds")) {
+            getLogger().warning("taunt-seconds is no longer read: set taunt-max-seconds and taunt-range instead.");
+        }
         game = new Game(this);
         getServer().getPluginManager().registerEvents(game, this);
 

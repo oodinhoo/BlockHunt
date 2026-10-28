@@ -179,6 +179,9 @@ class GameTest {
         assertEquals(15, Game.tauntSeconds(16, 30, 32));
         assertEquals(0, Game.tauntSeconds(32, 30, 32));
         assertEquals(0, Game.tauntSeconds(100, 30, 32));
+        assertEquals(0, Game.tauntSeconds(Double.MAX_VALUE, 30, 32), "no seeker to measure against");
+        assertEquals(0, Game.tauntSeconds(5, 30, 0), "range 0: taunts off");
+        assertEquals(0, Game.tauntSeconds(5, 30, -10), "a negative range must not give more than max");
     }
 
     /**
@@ -197,11 +200,31 @@ class GameTest {
 
         hider.setLocation(new Location(arena, 100.5, 70, 0.5));
         taunt(hider);
+        assertTrue(actionBars(hider).contains("Too far: get closer to a seeker."));
         assertTrue(messages(hider).stream().noneMatch(message -> message.contains("taunted")));
 
         hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // 4 blocks: 30 * (1 - 4 / 32) = 26
         taunt(hider);
         assertTrue(messages(hider).stream().anyMatch(message -> message.contains("taunted the seekers: -26s")));
+    }
+
+    /**
+     * Near the end of the clock, a taunt takes off what is left but the last second, and says so:
+     * 10 s of seeking, 9.95 s left after one tick, so 8 whole seconds above the last one.
+     */
+    @Test
+    void tauntNearTheEndTakesOnlyWhatIsLeftAndSaysSo() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("seek-seconds", 10);
+        start();
+        server.getScheduler().performTicks(21); // seekers released, 199 ticks left
+        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        hider.getInventory().setHeldItemSlot(1);
+        hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // worth 26 s
+        messages(hider);
+
+        taunt(hider);
+        assertTrue(messages(hider).stream().anyMatch(message -> message.contains("taunted the seekers: -8s")));
     }
 
     private void taunt(PlayerMock hider) {
@@ -223,6 +246,14 @@ class GameTest {
             clicks.add(component.clickEvent());
         }
         component.children().forEach(child -> collectClicks(child, clicks));
+    }
+
+    private static List<String> actionBars(PlayerMock player) {
+        List<String> shown = new ArrayList<>();
+        for (Component bar = player.nextActionBar(); bar != null; bar = player.nextActionBar()) {
+            shown.add(PlainTextComponentSerializer.plainText().serialize(bar));
+        }
+        return shown;
     }
 
     private static List<String> messages(PlayerMock player) {
