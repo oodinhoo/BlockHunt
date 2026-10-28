@@ -33,5 +33,9 @@ blocks:
   - PUMPKIN
   - MELON
 
+# The play area: a dome of this radius, in blocks, around the arena spawn. During a game, its
+# players cannot leave it and nobody else can enter. 0 turns it off.
+arena-radius: 40
+
 # Arena spawn, written in game by /bh setspawn.
 # spawn:

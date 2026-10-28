@@ -49,6 +49,18 @@ mode and cannot break, place, drop or pick up anything.
 | Hiding | 30 s | Seekers are blinded and frozen, hiders run and hide |
 | Seeking | 5 min | Seekers hunt. Time out: hiders win |
 
+### The dome
+
+The game is played in a dome: a sphere of `arena-radius` blocks (40 by default) around the arena
+spawn, so a dome above the ground, with the caves right under it. During a game:
+
+- its players cannot leave it, walking, flying, or with an ender pearl or a chorus fruit;
+- nobody else can enter it, and anyone standing in it when the game starts is set down outside;
+- its wall shows as cyan particles to whoever comes within 6 blocks of it, from inside or outside.
+
+Nothing is built in the world, and between games the dome is gone: the arena is free to build in.
+Teleports made by the plugin (to the arena and back) and admin commands such as `/tp` go through.
+
 ## Playing as a hider
 
 You are invisible: the others only see the block you are disguised as, following you.
@@ -98,6 +110,7 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 | `taunts` | `2` | Taunts per hider and per game |
 | `taunt-seconds` | `15` | Time a taunt takes off the clock |
 | `blocks` | 8 full blocks | Starting disguises, one picked at random per hider |
+| `arena-radius` | `40` | Radius of the dome around the arena spawn, in blocks. `0` turns it off |
 | `spawn` | none | Arena spawn, written by `/bh setspawn` |
 
 ## Known limits
@@ -108,6 +121,8 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
   `/gamerule reducedDebugInfo false` puts it back.
 - **The fake block of a solid hider is resent every second**: a block update right next to it can
   make it flicker for up to a second.
+- **The dome does not stop mounts**: someone who is not in the game can ride a horse or a boat into
+  it. Players of the game cannot mount anything.
 
 ## Documentation
 

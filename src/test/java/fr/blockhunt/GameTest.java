@@ -6,6 +6,8 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.AfterEach;
@@ -166,6 +168,102 @@ class GameTest {
         game.leave(alice);
 
         assertTrue(clicks(bob).contains(ClickEvent.runCommand("/bh leave")));
+    }
+
+    // --- The arena dome: a 10 block sphere around the spawn (0.5, 70, 0.5) -------------------
+
+    private static final double DOME = 10;
+
+    private Location inArena(double x) {
+        return new Location(arena, x, 70, 0.5);
+    }
+
+    private static boolean insideDome(Location location) {
+        return location.distance(new Location(location.getWorld(), 0.5, 70, 0.5)) <= DOME;
+    }
+
+    /**
+     * Moves the player as a Paper server would: to the event's destination, as listeners left it,
+     * or nowhere if they cancelled it. MockBukkit's own move ignores a destination changed by setTo.
+     */
+    private Location move(PlayerMock player, Location to) {
+        PlayerMoveEvent event = new PlayerMoveEvent(player, player.getLocation(), to);
+        server.getPluginManager().callEvent(event);
+        Location end = event.isCancelled() ? event.getFrom() : event.getTo();
+        player.setLocation(end);
+        return end;
+    }
+
+    private PlayerMock hider() {
+        return alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+    }
+
+    /** A player of the game walks into the wall of the dome: held back inside. */
+    @Test
+    void playersCannotWalkOutOfTheDome() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock hider = hider();
+        hider.setLocation(inArena(9.5));
+
+        assertTrue(insideDome(move(hider, inArena(11.5))));
+    }
+
+    /** An ender pearl or a chorus fruit does not get a player of the game out either. */
+    @Test
+    void playersCannotPearlOutOfTheDome() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock hider = hider();
+
+        assertFalse(hider.teleport(inArena(30), PlayerTeleportEvent.TeleportCause.ENDER_PEARL));
+        assertTrue(insideDome(hider.getLocation()));
+    }
+
+    /** Someone who is not in the game cannot walk in while it runs. */
+    @Test
+    void outsidersCannotEnterTheDomeDuringAGame() {
+        plugin.getConfig().set("arena-radius", DOME);
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setLocation(inArena(11.5));
+        start();
+
+        assertFalse(insideDome(move(carol, inArena(9.5))));
+    }
+
+    /** Someone who is not in the game and stands in the arena at the start is set down outside. */
+    @Test
+    void outsidersInsideTheDomeAreSentOutAtTheStart() {
+        plugin.getConfig().set("arena-radius", DOME);
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setLocation(inArena(3));
+        start();
+
+        assertEquals(arena, carol.getWorld());
+        assertFalse(insideDome(carol.getLocation()));
+    }
+
+    /** Between games the dome is gone: the arena is free to walk in, and to build. */
+    @Test
+    void theDomeIsGoneOnceTheGameEnds() {
+        plugin.getConfig().set("arena-radius", DOME);
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setLocation(inArena(11.5));
+        start();
+        game.leave(alice);
+
+        assertTrue(insideDome(move(carol, inArena(9.5))));
+    }
+
+    /** arena-radius 0: no dome at all. */
+    @Test
+    void radiusZeroTurnsTheDomeOff() {
+        plugin.getConfig().set("arena-radius", 0);
+        start();
+        PlayerMock hider = hider();
+        hider.setLocation(inArena(9.5));
+
+        assertFalse(insideDome(move(hider, inArena(11.5))));
     }
 
     /** The click actions in every message the player got since the last check. */
