@@ -1,6 +1,7 @@
 package fr.blockhunt;
 
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -14,7 +15,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -105,6 +105,8 @@ final class Game implements Listener {
     private int phaseTicks;
     /** World of the running game, and its reducedDebugInfo rule before the game. */
     private World arena;
+    /** Ticks before the lobby starts a game on its own, -1 while it waits for players. */
+    private int countdown = -1;
     private Boolean debugInfoBefore;
 
     Game(Plugin plugin) {
@@ -154,7 +156,7 @@ final class Game implements Listener {
         }
     }
 
-    void start(CommandSender sender) {
+    void start(Audience sender) {
         if (state != State.LOBBY) {
             sender.sendMessage(Component.text("A game is already running.", NamedTextColor.RED));
             return;
@@ -212,6 +214,8 @@ final class Game implements Listener {
             stash.save(player, back.get(player.getUniqueId()));
             sessions.put(player.getUniqueId(), new Session(taunts));
         }
+        // A countdown cut short by /bh start must not resume when this game ends.
+        countdown = -1;
         assignRoles(online, blocks);
     }
 
@@ -275,6 +279,7 @@ final class Game implements Listener {
         disguises.values().forEach(disguise -> disguise.tick(solidifyTicks));
 
         if (state == State.LOBBY) {
+            tickCountdown();
             return;
         }
         // Every tick, or the bar would jump: the hider's XP bar fills up towards solid.
@@ -370,10 +375,51 @@ final class Game implements Listener {
         if (plugin.getConfig().getLocation("spawn") == null) {
             return Component.text("No spawn set", NamedTextColor.RED);
         }
-        int missing = MIN_PLAYERS - players.size();
-        return missing > 0
-                ? Component.text("Need " + missing + " more", NamedTextColor.YELLOW)
+        int missing = minPlayers() - players.size();
+        if (missing > 0) {
+            return Component.text("Need " + missing + " more", NamedTextColor.YELLOW);
+        }
+        return countdown >= 0
+                ? Component.text("Starts in " + clock((countdown + 19) / 20), NamedTextColor.GREEN)
                 : Component.text("Ready", NamedTextColor.GREEN);
+    }
+
+    /** Players the lobby waits for before counting down: never under one seeker and one hider. */
+    private int minPlayers() {
+        return Math.max(MIN_PLAYERS, plugin.getConfig().getInt("min-players"));
+    }
+
+    /**
+     * In the lobby, every tick: counts down while enough players joined and a spawn is set, then
+     * starts the game as /bh start does. Falling under the minimum stops it.
+     */
+    private void tickCountdown() {
+        boolean ready = players.size() >= minPlayers() && plugin.getConfig().getLocation("spawn") != null;
+        if (!ready) {
+            if (countdown >= 0) {
+                countdown = -1;
+                broadcast(Component.text("Not enough players: the countdown stopped.", NamedTextColor.YELLOW));
+                updateHud();
+            }
+            return;
+        }
+        if (countdown < 0) {
+            int seconds = Math.max(0, plugin.getConfig().getInt("countdown-seconds"));
+            countdown = seconds * 20;
+            broadcast(Component.text("The game starts in " + seconds + "s.", NamedTextColor.GREEN));
+            updateHud();
+        } else if (countdown > 0) {
+            countdown--;
+            if (countdown % 20 == 0) {
+                updateHud();
+            }
+        } else {
+            // Before starting: a start that fails (no valid block, arena unloaded) waits a whole
+            // new countdown instead of being retried every tick. Its reason goes to the lobby
+            // too, or players would only see the countdown come back.
+            countdown = -1;
+            start(Audience.audience(plugin.getServer().getConsoleSender(), Audience.audience(online(players))));
+        }
     }
 
     private List<Sidebar.Line> seekerLines(Player seeker, Session session) {
