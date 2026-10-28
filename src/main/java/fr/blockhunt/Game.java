@@ -702,8 +702,9 @@ final class Game implements Listener {
     // --- Events ---------------------------------------------------------------
 
     // Not ignoreCancelled: vanilla never "attacks" an Interaction (willAttack is false), so Paper
-    // fires this event already cancelled, and setCancelled cannot change that. Only our own
-    // hitboxes are handled here, which no protection plugin has a reason to guard.
+    // fires this event already cancelled, and setCancelled cannot change that. A hit on one of
+    // our hitboxes is handled even so: no protection plugin has a reason to guard them. A player
+    // of the game hitting any other entity only gets that hit cancelled.
     @EventHandler(priority = EventPriority.HIGH)
     public void onAttack(PrePlayerAttackEntityEvent event) {
         Disguise target = disguises.values().stream()

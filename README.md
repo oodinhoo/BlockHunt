@@ -71,7 +71,8 @@ You are invisible: the others only see the block you are disguised as, following
 - **Stand still for 3 seconds** on solid ground: you snap onto the grid and become a real-looking
   block. Moving again turns you back. The XP bar fills up as you stay still.
 - **Right-click a block of the map** to take its look, once every 30 seconds (the cooldown shows on
-  slot 1). Chests, signs, beds and other blocks with their own renderer cannot be copied.
+  slot 1). Blocks that are not solid (flowers, torches, grass, carpets) and blocks with their
+  own renderer (chests, signs, beds) cannot be copied.
 - **Taunt** (rocket, slot 2): a loud goat scream at your position, paid back by time off the clock.
   The closer to a seeker, as the crow flies and through walls, the more: 30 seconds right next to
   one, 15 at 16 blocks, nothing from about 32 blocks, where the taunt is refused and kept. Near the
