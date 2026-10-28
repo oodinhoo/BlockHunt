@@ -1,3 +1,8 @@
+# Once this many players joined, the game starts on its own after the countdown (2 at least).
+# An admin can still /bh start at once.
+min-players: 2
+countdown-seconds: 30
+
 # Seekers are blinded and frozen while hiders run.
 hide-seconds: 30
 seek-seconds: 300

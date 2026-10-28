@@ -27,13 +27,14 @@ the `plugins/` folder of a **Paper 26.2** server.
 ## Running a game
 
 1. Stand in the arena and run `/bh setspawn`.
-2. Every player runs `/bh join` (at least two).
-3. An admin runs `/bh start`.
+2. Every player runs `/bh join`.
+3. Once `min-players` joined (2 by default), a 30 second countdown starts, and the game with it.
+   A player leaving under the minimum stops the countdown. An admin can `/bh start` at once.
 
 Joining shows a title and a lobby sidebar that stays on screen: the status (*Need 1 more*,
-*Ready*, or *No spawn set* for the admin), the players who joined, the length of both phases, and
-how to leave. During the game, the same sidebar shows your role, and the lobby comes back at the
-end.
+*Starts in 0:25*, or *No spawn set* for the admin), the players who joined, the length of both
+phases, and how to leave. During the game, the same sidebar shows your role. At the end, the lobby
+comes back with the same players, and the countdown for the next game starts again.
 
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
 back at the end of the game, or when they leave it, and they are taken back where they stood
@@ -72,7 +73,7 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 | Command | Permission | Default |
 |---|---|---|
 | `/bh join`, `/bh leave` | none | everyone |
-| `/bh start` | `blockhunt.admin` | operators |
+| `/bh start` | `blockhunt.admin` | operators. Starts at once, without waiting for the countdown |
 | `/bh setspawn` | `blockhunt.admin` | operators |
 | `/bh disguise <block>` | `blockhunt.admin` | operators. Toggles a disguise outside a game, for testing |
 
@@ -84,6 +85,8 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `min-players` | `2` | Players in the lobby before the countdown starts (2 at least) |
+| `countdown-seconds` | `30` | Length of the countdown before a game starts on its own |
 | `hide-seconds` | `30` | Length of the hiding phase |
 | `seek-seconds` | `300` | Length of the seeking phase |
 | `solidify-seconds` | `3` | Time standing still before turning solid |
