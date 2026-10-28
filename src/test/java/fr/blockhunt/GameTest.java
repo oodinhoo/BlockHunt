@@ -1,5 +1,7 @@
 package fr.blockhunt;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -13,9 +15,11 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A game must give every player their own inventory back, and take them back where they stood,
@@ -132,6 +136,23 @@ class GameTest {
         server.getScheduler().performTicks(ONE_SECOND_COUNTDOWN * 2);
 
         assertRestored(alice, Material.DIAMOND, 10);
+    }
+
+    /** A countdown whose start fails tells the lobby why, not only the console. */
+    @Test
+    void failedAutoStartTellsThePlayersWhy() {
+        plugin.getConfig().set("blocks", List.of("NOT_A_BLOCK"));
+        server.getScheduler().performTicks(ONE_SECOND_COUNTDOWN);
+
+        assertTrue(messages(alice).contains("No valid block in config.yml."));
+    }
+
+    private static List<String> messages(PlayerMock player) {
+        List<String> said = new ArrayList<>();
+        for (Component message = player.nextComponentMessage(); message != null; message = player.nextComponentMessage()) {
+            said.add(PlainTextComponentSerializer.plainText().serialize(message));
+        }
+        return said;
     }
 
     private void assertRestored(PlayerMock player, Material own, double x) {
