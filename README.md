@@ -36,8 +36,10 @@ how to leave. During the game, the same sidebar shows your role, and the lobby c
 end.
 
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
-back at the end of the game, even after a server crash (on their next join). During the game,
-everyone is in adventure mode and cannot break, place, drop or pick up anything.
+back at the end of the game, or when they leave it, and they are taken back where they stood
+before the game. This holds even after a server crash (on their next join); a player whose world
+was deleted meanwhile lands at the main world's spawn. During the game, everyone is in adventure
+mode and cannot break, place, drop or pick up anything.
 
 | Phase | Default | What happens |
 |---|---|---|

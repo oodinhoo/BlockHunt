@@ -1,6 +1,7 @@
 package fr.blockhunt;
 
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.ItemStack;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
+import org.mockbukkit.mockbukkit.world.WorldMock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,7 +40,7 @@ class StashTest {
         player.getInventory().setItem(3, ItemStack.of(Material.DIAMOND, 5));
         player.getInventory().setItemInOffHand(ItemStack.of(Material.SHIELD));
 
-        stash.save(player);
+        stash.save(player, player.getLocation());
         assertTrue(player.getInventory().isEmpty());
         assertEquals(GameMode.ADVENTURE, player.getGameMode());
 
@@ -63,9 +65,23 @@ class StashTest {
         PlayerMock player = server.addPlayer();
         player.openInventory(server.createInventory(null, 9));
 
-        stash.save(player);
+        stash.save(player, player.getLocation());
 
         // Back to the player's own view: what a closed inventory shows.
         assertEquals(InventoryType.CRAFTING, player.getOpenInventory().getType());
+    }
+
+    /** Back after a crash, but the world they stood in was deleted: the main world's spawn. */
+    @Test
+    void restoreToADeletedWorldGoesToTheMainSpawn() {
+        Stash stash = new Stash(MockBukkit.createMockPlugin());
+        PlayerMock player = server.addPlayer();
+        // Never added to the server: as gone as a deleted world.
+        stash.save(player, new Location(new WorldMock(), 10, 70, 10));
+        player.setLocation(new Location(player.getWorld(), 100, 70, 100));
+
+        stash.restore(player);
+
+        assertEquals(server.getWorlds().getFirst().getSpawnLocation(), player.getLocation());
     }
 }
