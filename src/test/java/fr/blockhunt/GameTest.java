@@ -64,6 +64,16 @@ class GameTest {
         assertRestored(bob, Material.EMERALD);
     }
 
+    /** A seeker sent to another world (a /spawn from another plugin) leaves the game, which ends. */
+    @Test
+    void seekerChangingWorldLeavesTheGame() {
+        PlayerMock seeker = alice.getInventory().contains(Kit.SONAR) ? alice : bob;
+        seeker.teleport(server.addSimpleWorld("elsewhere").getSpawnLocation());
+
+        assertRestored(alice, Material.DIAMOND);
+        assertRestored(bob, Material.EMERALD);
+    }
+
     private static void assertRestored(PlayerMock player, Material own) {
         assertEquals(ItemStack.of(own, 3), player.getInventory().getItem(5), player.getName());
         assertEquals(GameMode.SURVIVAL, player.getGameMode(), player.getName());

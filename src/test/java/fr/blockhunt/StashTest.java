@@ -2,6 +2,7 @@ package fr.blockhunt;
 
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,5 +54,18 @@ class StashTest {
         stash.restore(player);
         assertEquals(GameMode.SURVIVAL, player.getGameMode());
         assertEquals(ItemStack.of(Material.DIAMOND, 5), player.getInventory().getItem(3));
+    }
+
+    /** Closing puts crafting grid and cursor items back in the inventory, before it is saved. */
+    @Test
+    void saveClosesTheOpenInventoryFirst() {
+        Stash stash = new Stash(MockBukkit.createMockPlugin());
+        PlayerMock player = server.addPlayer();
+        player.openInventory(server.createInventory(null, 9));
+
+        stash.save(player);
+
+        // Back to the player's own view: what a closed inventory shows.
+        assertEquals(InventoryType.CRAFTING, player.getOpenInventory().getType());
     }
 }
