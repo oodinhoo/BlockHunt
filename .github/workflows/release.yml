@@ -11,6 +11,8 @@ jobs:
   # toolchain download), which never gets near the token that can publish.
   jar:
     runs-on: ubuntu-latest
+    # Same as the CI build: a hung test fails the release in minutes, not 6 hours.
+    timeout-minutes: 15
     outputs:
       paper: ${{ steps.paper.outputs.paper }}
     steps:

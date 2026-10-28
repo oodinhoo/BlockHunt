@@ -34,6 +34,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -85,7 +86,7 @@ final class Game implements Listener {
         }
     }
 
-    private final BlockHuntPlugin plugin;
+    private final Plugin plugin;
     private final Stash stash;
 
     /** Everyone who joined, in the lobby or in the running game. */
@@ -106,7 +107,7 @@ final class Game implements Listener {
     private World arena;
     private Boolean debugInfoBefore;
 
-    Game(BlockHuntPlugin plugin) {
+    Game(Plugin plugin) {
         this.plugin = plugin;
         stash = new Stash(plugin);
         // Always running: test disguises need ticking outside a game too.

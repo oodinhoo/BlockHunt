@@ -37,7 +37,10 @@ game, with at least two players for a game, and say in the pull request how you 
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
   `fix:`, `refactor:`, `perf:`, `test:`, `docs:`, `build:`, `chore:`, then a short summary in the
   imperative.
-- The CI must pass. Pull requests are squash-merged: the title becomes the commit on `main`.
+- The CI must pass. A pull request that touches the plugin code or its build (`src/`, Gradle files)
+  also needs every box of its checklist ticked: an item that does not apply is ticked with a word
+  on why. Pull requests are squash-merged: the title becomes the commit on `main`. What each check
+  does, and what to do when one fails: [continuous integration](docs/ci.md).
 
 By contributing, you agree that your contribution is licensed under the [MIT License](LICENSE) and
 that you follow the [Code of Conduct](CODE_OF_CONDUCT.md).

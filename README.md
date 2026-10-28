@@ -105,6 +105,7 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 ## Documentation
 
 - [Contributing](CONTRIBUTING.md) — building, testing and getting a change merged.
+- [Continuous integration](docs/ci.md) — what runs on a pull request and a release, and what to do when it fails.
 - [Security policy](SECURITY.md) — how to report a vulnerability privately.
 
 ## License
