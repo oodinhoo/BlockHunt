@@ -3,8 +3,12 @@ package fr.blockhunt;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,5 +87,40 @@ class StashTest {
         stash.restore(player);
 
         assertEquals(server.getWorlds().getFirst().getSpawnLocation(), player.getLocation());
+    }
+
+    /**
+     * A refused teleport back (a mount, another plugin) keeps the position, and the next game
+     * must not replace it with the arena: the player still goes home in the end.
+     */
+    @Test
+    void refusedTeleportBackKeepsWhereThePlayerCameFrom() {
+        Plugin plugin = MockBukkit.createMockPlugin();
+        Stash stash = new Stash(plugin);
+        PlayerMock player = server.addPlayer();
+        Location home = new Location(player.getWorld(), 10, 70, 10);
+        Location arena = new Location(player.getWorld(), 100, 70, 100);
+        RefuseTeleports refuse = new RefuseTeleports();
+        server.getPluginManager().registerEvents(refuse, plugin);
+
+        stash.save(player, home);
+        player.setLocation(arena);
+        stash.restore(player);
+        assertEquals(arena, player.getLocation(), "refused: still in the arena");
+
+        stash.save(player, arena); // the next game, started from the arena
+        refuse.on = false;
+        stash.restore(player);
+        assertEquals(home, player.getLocation());
+    }
+
+    /** Cancels every teleport while {@code on}. */
+    public static final class RefuseTeleports implements Listener {
+        boolean on = true;
+
+        @EventHandler
+        public void onTeleport(PlayerTeleportEvent event) {
+            event.setCancelled(on);
+        }
     }
 }

@@ -46,8 +46,12 @@ final class Stash {
                 .toArray(ItemStack[]::new);
         pdc.set(inventoryKey, PersistentDataType.BYTE_ARRAY, ItemStack.serializeItemsAsBytes(contents));
         pdc.set(modeKey, PersistentDataType.STRING, player.getGameMode().name());
-        pdc.set(positionKey, PersistentDataType.STRING, back.getWorld().getUID() + " " + back.getX() + " "
-                + back.getY() + " " + back.getZ() + " " + back.getYaw() + " " + back.getPitch());
+        // One left by a refused teleport back is where the player really came from: the arena
+        // they still stand in must not replace it.
+        if (!pdc.has(positionKey)) {
+            pdc.set(positionKey, PersistentDataType.STRING, back.getWorld().getUID() + " " + back.getX() + " "
+                    + back.getY() + " " + back.getZ() + " " + back.getYaw() + " " + back.getPitch());
+        }
         player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
     }
