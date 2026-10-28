@@ -1,0 +1,27 @@
+name: Checklist
+# Separate from ci.yml: editing the description reruns this check, not the build.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+concurrency:
+  group: checklist-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # "checklist" is a required check to merge: every box of the description must be ticked.
+  checklist:
+    runs-on: ubuntu-latest
+    steps:
+      # The body is read from the event file, never pasted into the script: it is user input.
+      - name: Every box of the description is ticked
+        run: |
+          unchecked=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" | tr -d '\r' \
+            | grep -E '^[[:space:]]*[-*+] \[ \]' || true)
+          if [ -n "$unchecked" ]; then
+            echo "::error::Tick every box of the pull request description, or say there why it does not apply."
+            echo "$unchecked"
+            exit 1
+          fi
