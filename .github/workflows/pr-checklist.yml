@@ -4,20 +4,34 @@ on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
-permissions: {}
+permissions:
+  pull-requests: read # list the changed files
 
 concurrency:
   group: checklist-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # "checklist" is a required check to merge: every box of the description must be ticked.
+  # "checklist" is a required check to merge: every box of the description must be ticked, when
+  # the pull request touches the plugin code or its build. Docs and workflows alone: nothing to tick.
   checklist:
     runs-on: ubuntu-latest
     steps:
       # The body is read from the event file, never pasted into the script: it is user input.
       - name: Every box of the description is ticked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
+          # Its own line: a failed call stops the job here instead of passing as "no code changed".
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename')
+          # A new kind of code or build file goes in this list.
+          code=$(printf '%s\n' "$files" \
+            | grep -E '^(src/|gradle/|build\.gradle\.kts$|settings\.gradle\.kts$|gradle\.properties$|gradlew(\.bat)?$)' || true)
+          if [ -z "$code" ]; then
+            echo "No plugin code or build file changed: no checklist to tick."
+            exit 0
+          fi
           unchecked=$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" | tr -d '\r' \
             | grep -E '^[[:space:]]*[-*+] \[ \]' || true)
           if [ -n "$unchecked" ]; then
