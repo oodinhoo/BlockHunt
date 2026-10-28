@@ -6,6 +6,10 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.AfterEach;
@@ -166,6 +170,43 @@ class GameTest {
         game.leave(alice);
 
         assertTrue(clicks(bob).contains(ClickEvent.runCommand("/bh leave")));
+    }
+
+    /** The closer to a seeker, the more time a taunt takes off: all of it right next to one, none at the range. */
+    @Test
+    void tauntTakesMoreTimeTheCloserTheSeeker() {
+        assertEquals(30, Game.tauntSeconds(0, 30, 32));
+        assertEquals(15, Game.tauntSeconds(16, 30, 32));
+        assertEquals(0, Game.tauntSeconds(32, 30, 32));
+        assertEquals(0, Game.tauntSeconds(100, 30, 32));
+    }
+
+    /**
+     * A taunt from too far is refused and kept: with a single taunt, the one from close by still
+     * works, and says how many seconds it took off. Seekers stay at the arena spawn (0.5, 70, 0.5).
+     */
+    @Test
+    void tauntFromTooFarIsRefusedAndKept() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("taunts", 1);
+        start();
+        server.getScheduler().performTicks(21); // seekers released
+        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        hider.getInventory().setHeldItemSlot(1); // the rocket
+        messages(hider);
+
+        hider.setLocation(new Location(arena, 100.5, 70, 0.5));
+        taunt(hider);
+        assertTrue(messages(hider).stream().noneMatch(message -> message.contains("taunted")));
+
+        hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // 4 blocks: 30 * (1 - 4 / 32) = 26
+        taunt(hider);
+        assertTrue(messages(hider).stream().anyMatch(message -> message.contains("taunted the seekers: -26s")));
+    }
+
+    private void taunt(PlayerMock hider) {
+        server.getPluginManager().callEvent(new PlayerInteractEvent(hider, Action.RIGHT_CLICK_AIR,
+                hider.getInventory().getItemInMainHand(), null, BlockFace.SELF, EquipmentSlot.HAND));
     }
 
     /** The click actions in every message the player got since the last check. */

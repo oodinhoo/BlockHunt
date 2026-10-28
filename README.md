@@ -57,8 +57,10 @@ You are invisible: the others only see the block you are disguised as, following
   block. Moving again turns you back. The XP bar fills up as you stay still.
 - **Right-click a block of the map** to take its look, once every 30 seconds (the cooldown shows on
   slot 1). Chests, signs, beds and other blocks with their own renderer cannot be copied.
-- **Taunt** (rocket, slot 2): a loud goat scream at your position, paid back by 15 seconds off the
-  clock. Two per game.
+- **Taunt** (rocket, slot 2): a loud goat scream at your position, paid back by time off the clock.
+  The closer to a seeker, the more: 30 seconds right next to one, 15 at 16 blocks, nothing from 32
+  blocks, where the taunt is refused and kept. Your sidebar shows what a taunt would take off right
+  now. Two per game.
 
 ## Playing as a seeker
 
@@ -96,7 +98,8 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 | `seekers` | `1` | Seekers at the start (at least one hider is always left) |
 | `sonar-cooldown-seconds` | `45` | Cooldown of the seekers' sonar |
 | `taunts` | `2` | Taunts per hider and per game |
-| `taunt-seconds` | `15` | Time a taunt takes off the clock |
+| `taunt-max-seconds` | `30` | Time a taunt takes off the clock right next to a seeker |
+| `taunt-range` | `32` | Distance to the nearest seeker at which a taunt takes nothing off, and is refused |
 | `blocks` | 8 full blocks | Starting disguises, one picked at random per hider |
 | `spawn` | none | Arena spawn, written by `/bh setspawn` |
 

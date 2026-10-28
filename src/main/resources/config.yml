@@ -20,7 +20,10 @@ sonar-cooldown-seconds: 45
 
 # Hiders' rocket: a loud sound at their position, paid back by time off the clock.
 taunts: 2
-taunt-seconds: 15
+# The closer to a seeker, the more: taunt-max-seconds right next to one, down in a straight line
+# to nothing at taunt-range blocks. Farther than that, a taunt is refused and kept.
+taunt-max-seconds: 30
+taunt-range: 32
 
 # Each hider gets one at random. Full blocks only: the fake block fills the whole cell.
 blocks:
