@@ -26,7 +26,8 @@ taunts: 2
 taunt-max-seconds: 30
 taunt-range: 32
 
-# Each hider gets one at random. Full blocks only: the fake block fills the whole cell.
+# Each hider starts as one of these, at random. Any block is accepted, but full blocks blend in
+# best: a slab or a torch still snaps onto the grid, and stands out there.
 blocks:
   - OAK_PLANKS
   - STONE
