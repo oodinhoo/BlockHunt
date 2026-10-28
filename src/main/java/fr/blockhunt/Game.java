@@ -34,7 +34,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -66,12 +65,6 @@ final class Game implements Listener {
 
     /** Distance at which a seeker's XP bar is empty. */
     private static final double PROXIMITY_RANGE = 50;
-
-    /**
-     * The seekers' sonar. Not a plain compass: it is WorldEdit's default navigation wand, whose
-     * right-click teleports the player before this plugin even sees the click.
-     */
-    private static final Material SONAR = Material.RECOVERY_COMPASS;
 
     /** Pause between two taunts, so a double click does not burn both. */
     private static final int TAUNT_SPAM_TICKS = 200;
@@ -227,16 +220,16 @@ final class Game implements Listener {
             player.showBossBar(bar);
             if (i < seekerCount) {
                 seekers.add(player.getUniqueId());
-                seekerKit(player);
+                Kit.seeker(player);
                 player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, hideTicks, 0, false, false));
                 player.showTitle(Title.title(Component.text("Seeker", NamedTextColor.RED),
                         Component.text("Wait while they hide...")));
             } else {
                 Material block = blocks.get(ThreadLocalRandom.current().nextInt(blocks.size()));
                 disguise(player, block.createBlockData());
-                hiderKit(player, block.createBlockData());
+                Kit.hider(player, block.createBlockData());
                 player.showTitle(Title.title(Component.text("Hider", NamedTextColor.GREEN),
-                        Component.text("You are " + name(block) + ". Hide!")));
+                        Component.text("You are " + Kit.name(block) + ". Hide!")));
             }
         }
         phase(State.HIDING, hideTicks);
@@ -387,14 +380,14 @@ final class Game implements Listener {
                 new Sidebar.Line("Seekers", Component.text(seekers.size())),
                 Sidebar.EMPTY,
                 new Sidebar.Line("Your finds", Component.text(session.finds)),
-                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(SONAR))));
+                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(Kit.SONAR))));
     }
 
     private List<Sidebar.Line> hiderLines(Disguise disguise, Session session) {
         return List.of(
                 new Sidebar.Line("Role", Component.text("Hider", NamedTextColor.GREEN)),
                 Sidebar.EMPTY,
-                new Sidebar.Line("Disguise", Component.text(name(disguise.block().getMaterial()))),
+                new Sidebar.Line("Disguise", Component.text(Kit.name(disguise.block().getMaterial()))),
                 new Sidebar.Line("State", disguise.isSolid()
                         ? Component.text("Solid", NamedTextColor.GREEN)
                         : Component.text("Moving", NamedTextColor.YELLOW)),
@@ -426,7 +419,7 @@ final class Game implements Listener {
     private void found(Player hider, Player seeker) {
         undisguise(hider);
         seekers.add(hider.getUniqueId());
-        seekerKit(hider);
+        Kit.seeker(hider);
         Session session = sessions.get(seeker.getUniqueId());
         if (session != null) {
             session.finds++;
@@ -519,7 +512,7 @@ final class Game implements Listener {
         player.hideBossBar(bar);
         sessions.remove(player.getUniqueId());
         // Or the sonar, taunt or block cooldowns would follow the player out of the game.
-        clearKit(player);
+        Kit.clear(player);
         stash.restore(player);
         // The XP bar was only ever faked on the client: resend the real one.
         player.sendExperienceChange(player.getExp(), player.getLevel());
@@ -555,50 +548,6 @@ final class Game implements Listener {
         if (disguise != null) {
             disguise.remove();
         }
-    }
-
-    // --- Inventories ----------------------------------------------------------
-
-    /** Empties the inventory, and the item cooldowns the kit started with it. */
-    private static void clearKit(Player player) {
-        for (ItemStack item : player.getInventory().getContents()) {
-            if (item != null && !item.isEmpty()) {
-                player.setCooldown(item, 0);
-            }
-        }
-        player.getInventory().clear();
-    }
-
-    private static void seekerKit(Player player) {
-        clearKit(player);
-        PlayerInventory inventory = player.getInventory();
-        inventory.setItem(0, item(Material.WOODEN_SWORD, "Seeker's sword"));
-        inventory.setItem(1, item(SONAR, "Sonar (right-click)"));
-        inventory.setHeldItemSlot(0);
-    }
-
-    private static void hiderKit(Player player, BlockData block) {
-        clearKit(player);
-        PlayerInventory inventory = player.getInventory();
-        inventory.setItem(0, blockItem(block));
-        inventory.setItem(1, item(Material.FIREWORK_ROCKET, "Taunt (right-click)"));
-        inventory.setHeldItemSlot(0);
-    }
-
-    /** The hider's current look in slot 1. Some blocks have no item form: the slot stays empty. */
-    private static ItemStack blockItem(BlockData block) {
-        Material material = block.getMaterial();
-        return material.isItem() ? item(material, "Disguise: " + name(material)) : ItemStack.empty();
-    }
-
-    private static ItemStack item(Material material, String name) {
-        ItemStack item = ItemStack.of(material);
-        item.editMeta(meta -> meta.itemName(Component.text(name)));
-        return item;
-    }
-
-    private static String name(Material material) {
-        return material.getKey().getKey().replace('_', ' ');
     }
 
     // --- Events ---------------------------------------------------------------
@@ -645,7 +594,7 @@ final class Game implements Listener {
         }
         Player player = event.getPlayer();
         ItemStack inHand = player.getInventory().getItemInMainHand();
-        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == SONAR) {
+        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == Kit.SONAR) {
             event.setCancelled(true);
             sonar(player, inHand);
             return;
@@ -684,13 +633,13 @@ final class Game implements Listener {
         disguise.change(look, cooldownTicks);
         if (sessions.containsKey(player.getUniqueId())) {
             // Slot 1 shows the new look, with the vanilla cooldown sweep over it.
-            ItemStack item = blockItem(look);
+            ItemStack item = Kit.blockItem(look);
             player.getInventory().setItem(0, item);
             if (!item.isEmpty()) {
                 player.setCooldown(item, cooldownTicks);
             }
         }
-        player.sendActionBar(Component.text("You are now " + name(block.getType()) + ".", NamedTextColor.GREEN));
+        player.sendActionBar(Component.text("You are now " + Kit.name(block.getType()) + ".", NamedTextColor.GREEN));
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
