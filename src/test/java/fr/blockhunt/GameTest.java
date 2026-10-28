@@ -6,9 +6,13 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.AfterEach;
@@ -169,6 +173,66 @@ class GameTest {
         game.leave(alice);
 
         assertTrue(clicks(bob).contains(ClickEvent.runCommand("/bh leave")));
+    }
+
+    /** The closer to a seeker, the more time a taunt takes off: all of it right next to one, none at the range. */
+    @Test
+    void tauntTakesMoreTimeTheCloserTheSeeker() {
+        assertEquals(30, Game.tauntSeconds(0, 30, 32));
+        assertEquals(15, Game.tauntSeconds(16, 30, 32));
+        assertEquals(0, Game.tauntSeconds(32, 30, 32));
+        assertEquals(0, Game.tauntSeconds(100, 30, 32));
+        assertEquals(0, Game.tauntSeconds(Double.MAX_VALUE, 30, 32), "no seeker to measure against");
+        assertEquals(0, Game.tauntSeconds(5, 30, 0), "range 0: taunts off");
+        assertEquals(0, Game.tauntSeconds(5, 30, -10), "a negative range must not give more than max");
+    }
+
+    /**
+     * A taunt from too far is refused and kept: with a single taunt, the one from close by still
+     * works, and says how many seconds it took off. Seekers stay at the arena spawn (0.5, 70, 0.5).
+     */
+    @Test
+    void tauntFromTooFarIsRefusedAndKept() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("taunts", 1);
+        start();
+        server.getScheduler().performTicks(21); // seekers released
+        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        hider.getInventory().setHeldItemSlot(1); // the rocket
+        messages(hider);
+
+        hider.setLocation(new Location(arena, 100.5, 70, 0.5));
+        taunt(hider);
+        assertTrue(actionBars(hider).contains("Too far: get closer to a seeker."));
+        assertTrue(messages(hider).stream().noneMatch(message -> message.contains("taunted")));
+
+        hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // 4 blocks: 30 * (1 - 4 / 32) = 26
+        taunt(hider);
+        assertTrue(messages(hider).stream().anyMatch(message -> message.contains("taunted the seekers: -26s")));
+    }
+
+    /**
+     * Near the end of the clock, a taunt takes off what is left but the last second, and says so:
+     * 10 s of seeking, 9.95 s left after one tick, so 8 whole seconds above the last one.
+     */
+    @Test
+    void tauntNearTheEndTakesOnlyWhatIsLeftAndSaysSo() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("seek-seconds", 10);
+        start();
+        server.getScheduler().performTicks(21); // seekers released, 199 ticks left
+        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        hider.getInventory().setHeldItemSlot(1);
+        hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // worth 26 s
+        messages(hider);
+
+        taunt(hider);
+        assertTrue(messages(hider).stream().anyMatch(message -> message.contains("taunted the seekers: -8s")));
+    }
+
+    private void taunt(PlayerMock hider) {
+        server.getPluginManager().callEvent(new PlayerInteractEvent(hider, Action.RIGHT_CLICK_AIR,
+                hider.getInventory().getItemInMainHand(), null, BlockFace.SELF, EquipmentSlot.HAND));
     }
 
     // --- The arena dome: a 10 block sphere around the spawn (0.5, 70, 0.5) -------------------
@@ -343,6 +407,14 @@ class GameTest {
             clicks.add(component.clickEvent());
         }
         component.children().forEach(child -> collectClicks(child, clicks));
+    }
+
+    private static List<String> actionBars(PlayerMock player) {
+        List<String> shown = new ArrayList<>();
+        for (Component bar = player.nextActionBar(); bar != null; bar = player.nextActionBar()) {
+            shown.add(PlainTextComponentSerializer.plainText().serialize(bar));
+        }
+        return shown;
     }
 
     private static List<String> messages(PlayerMock player) {

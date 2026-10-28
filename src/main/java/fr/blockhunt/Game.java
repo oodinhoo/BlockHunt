@@ -482,18 +482,32 @@ final class Game implements Listener {
                 new Sidebar.Line("Change", countdown(disguise.cooldownLeft())),
                 Sidebar.EMPTY,
                 new Sidebar.Line("Hiders left", Component.text(hidersLeft())),
-                new Sidebar.Line("Taunts", Component.text(session.taunts)));
+                new Sidebar.Line("Taunts", Component.text(session.taunts)),
+                new Sidebar.Line("Taunt now", tauntPreview(disguise.player(), session)));
+    }
+
+    /** What a taunt would take off the clock right now, for the hider to weigh the risk. */
+    private Component tauntPreview(Player hider, Session session) {
+        if (session.taunts <= 0) {
+            return Component.text("none left", NamedTextColor.GRAY);
+        }
+        if (tauntsOff()) {
+            return Component.text("off", NamedTextColor.GRAY);
+        }
+        // Not before the seekers are released: it would also tell the hiders how far the frozen
+        // seekers are, which the seekers' own hot and cold only gets once released.
+        if (state != State.SEEKING) {
+            return Component.text("after release", NamedTextColor.GRAY);
+        }
+        int seconds = tauntSeconds(hider);
+        return seconds > 0
+                ? Component.text("-" + seconds + "s", NamedTextColor.LIGHT_PURPLE)
+                : Component.text("too far", NamedTextColor.GRAY);
     }
 
     /** XP level = distance to the nearest hider, bar = how close; the action bar says hot or cold. */
     private void proximity(Player seeker) {
-        double nearest = Double.MAX_VALUE;
-        for (Disguise disguise : disguises.values()) {
-            Player hider = disguise.player();
-            if (isHider(hider) && hider.getWorld().equals(seeker.getWorld())) {
-                nearest = Math.min(nearest, hider.getLocation().distance(seeker.getLocation()));
-            }
-        }
+        double nearest = nearest(seeker, disguises.values().stream().map(Disguise::player).filter(this::isHider).toList());
         if (nearest == Double.MAX_VALUE) {
             seeker.sendExperienceChange(0, 0);
             return;
@@ -502,6 +516,13 @@ final class Game implements Listener {
         seeker.sendActionBar(nearest < 8 ? Component.text("Hot!", NamedTextColor.RED)
                 : nearest < 20 ? Component.text("Warm...", NamedTextColor.GOLD)
                 : Component.text("Cold", NamedTextColor.AQUA));
+    }
+
+    /** Distance to the nearest of {@code others} in the same world, as the crow flies; Double.MAX_VALUE if none. */
+    private static double nearest(Player from, List<Player> others) {
+        return others.stream().filter(other -> other.getWorld().equals(from.getWorld()))
+                .mapToDouble(other -> other.getLocation().distance(from.getLocation()))
+                .min().orElse(Double.MAX_VALUE);
     }
 
     private void found(Player hider, Player seeker) {
@@ -542,7 +563,10 @@ final class Game implements Listener {
         seeker.setCooldown(compass, plugin.getConfig().getInt("sonar-cooldown-seconds") * 20);
     }
 
-    /** A loud sound at the hider's position, paid back by time off the clock. */
+    /**
+     * A loud sound at the hider's position, paid back by time off the clock: the closer to a
+     * seeker, the more. Too far from every seeker, it is refused and kept.
+     */
     private void taunt(Player hider, ItemStack rocket) {
         Session session = sessions.get(hider.getUniqueId());
         if (state != State.SEEKING || session == null) {
@@ -556,14 +580,44 @@ final class Game implements Listener {
         if (hider.hasCooldown(rocket)) {
             return;
         }
+        int seconds = tauntSeconds(hider);
+        if (seconds <= 0) {
+            deny(hider, tauntsOff() ? "Taunts are off on this server." : "Too far: get closer to a seeker.");
+            return;
+        }
+        // The clock keeps its last second: near the end, a taunt takes off only what is left above
+        // it, and the message says that, not the full value.
+        int taken = Math.min(seconds, (ticksLeft - 20) / 20);
+        if (taken <= 0) {
+            deny(hider, "Too late: the clock is almost out.");
+            return;
+        }
         session.taunts--;
         hider.setCooldown(rocket, TAUNT_SPAM_TICKS);
         hider.getWorld().playSound(hider.getLocation(), Sound.ENTITY_GOAT_SCREAMING_AMBIENT, 2.0f, 1.0f);
-        int seconds = plugin.getConfig().getInt("taunt-seconds");
-        ticksLeft = Math.max(20, ticksLeft - seconds * 20);
-        broadcast(Component.text(hider.getName() + " taunted the seekers: -" + seconds + "s!", NamedTextColor.LIGHT_PURPLE));
+        ticksLeft -= taken * 20;
+        broadcast(Component.text(hider.getName() + " taunted the seekers: -" + taken + "s!", NamedTextColor.LIGHT_PURPLE));
         updateBar();
         updateHud();
+    }
+
+    /** What a taunt by this hider takes off the clock now, from their distance to the nearest seeker. */
+    private int tauntSeconds(Player hider) {
+        return tauntSeconds(nearest(hider, online(seekers)), plugin.getConfig().getInt("taunt-max-seconds"),
+                plugin.getConfig().getDouble("taunt-range"));
+    }
+
+    /**
+     * {@code max} right next to a seeker, then down evenly to 0 at {@code range} and beyond. Rounded
+     * to whole seconds, so it reaches 0 a little before {@code range}. A range of 0 or less: 0.
+     */
+    static int tauntSeconds(double distance, int max, double range) {
+        return range > 0 ? (int) Math.round(max * Math.max(0, 1 - distance / range)) : 0;
+    }
+
+    /** taunt-max-seconds or taunt-range at 0 or less: no taunt takes anything off, so none is allowed. */
+    private boolean tauntsOff() {
+        return plugin.getConfig().getInt("taunt-max-seconds") <= 0 || plugin.getConfig().getDouble("taunt-range") <= 0;
     }
 
     private void checkEnd() {
