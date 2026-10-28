@@ -1,6 +1,7 @@
 package fr.blockhunt;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -145,6 +147,41 @@ class GameTest {
         server.getScheduler().performTicks(ONE_SECOND_COUNTDOWN);
 
         assertTrue(messages(alice).contains("No valid block in config.yml."));
+    }
+
+    /** Who did not join gets a [Join] that runs /bh join; who is in the lobby gets no invite. */
+    @Test
+    void joiningInvitesTheOthersWithAClickToJoin() {
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        game.join(player(Material.IRON_INGOT, 40));
+
+        assertTrue(clicks(carol).contains(ClickEvent.runCommand("/bh join")));
+        assertFalse(clicks(alice).contains(ClickEvent.runCommand("/bh join")));
+    }
+
+    /** The players stay in the lobby after a game: a [Leave] that runs /bh leave gets them out. */
+    @Test
+    void endOfGameOffersAClickToLeave() {
+        start();
+        game.leave(alice);
+
+        assertTrue(clicks(bob).contains(ClickEvent.runCommand("/bh leave")));
+    }
+
+    /** The click actions in every message the player got since the last check. */
+    private static List<ClickEvent<?>> clicks(PlayerMock player) {
+        List<ClickEvent<?>> clicks = new ArrayList<>();
+        for (Component message = player.nextComponentMessage(); message != null; message = player.nextComponentMessage()) {
+            collectClicks(message, clicks);
+        }
+        return clicks;
+    }
+
+    private static void collectClicks(Component component, List<ClickEvent<?>> clicks) {
+        if (component.clickEvent() != null) {
+            clicks.add(component.clickEvent());
+        }
+        component.children().forEach(child -> collectClicks(child, clicks));
     }
 
     private static List<String> messages(PlayerMock player) {

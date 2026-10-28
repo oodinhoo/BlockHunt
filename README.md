@@ -27,14 +27,16 @@ the `plugins/` folder of a **Paper 26.2** server.
 ## Running a game
 
 1. Stand in the arena and run `/bh setspawn`.
-2. Every player runs `/bh join`.
+2. Every player runs `/bh join`. Each join tells the players who did not join yet in chat, with a
+   clickable **[Join]**.
 3. Once `min-players` joined (2 by default), a 30 second countdown starts, and the game with it.
    A player leaving under the minimum stops the countdown. An admin can `/bh start` at once.
 
 Joining shows a title and a lobby sidebar that stays on screen: the status (*Need 1 more*,
 *Starts in 0:25*, or *No spawn set* for the admin), the players who joined, the length of both
 phases, and how to leave. During the game, the same sidebar shows your role. At the end, the lobby
-comes back with the same players, and the countdown for the next game starts again.
+comes back with the same players, and the countdown for the next game starts again: a chat
+message with a clickable **[Leave]** gets a player out of it.
 
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
 back at the end of the game, or when they leave it, and they are taken back where they stood
