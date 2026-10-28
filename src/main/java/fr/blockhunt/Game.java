@@ -772,12 +772,13 @@ final class Game implements Listener {
         }
     }
 
-    /** The disguise entities stay in the old world: a disguised player who changes world is out. */
+    /**
+     * The disguise entities stay in the old world, and the game stays in the arena: a player who
+     * changes world is out, seekers included. start() teleports in the lobby, so it is not one.
+     */
     @EventHandler
     public void onChangedWorld(PlayerChangedWorldEvent event) {
-        if (disguises.containsKey(event.getPlayer().getUniqueId())) {
-            drop(event.getPlayer());
-        }
+        drop(event.getPlayer());
     }
 
     private void drop(Player player) {
