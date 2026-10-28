@@ -181,9 +181,12 @@ final class Game implements Listener {
         // not count as leaving the game. A refused teleport (a mount, another plugin) leaves that
         // player out, rather than playing from wherever they stand.
         List<Player> online = new ArrayList<>();
+        Map<UUID, Location> back = new HashMap<>();
         for (Player player : online(players)) {
+            Location from = player.getLocation();
             if (player.teleport(spawn)) {
                 online.add(player);
+                back.put(player.getUniqueId(), from);
             } else {
                 players.remove(player.getUniqueId());
                 removeSidebar(player);
@@ -206,7 +209,7 @@ final class Game implements Listener {
         int taunts = plugin.getConfig().getInt("taunts");
         for (Player player : online) {
             undisguise(player);
-            stash.save(player);
+            stash.save(player, back.get(player.getUniqueId()));
             sessions.put(player.getUniqueId(), new Session(taunts));
         }
         assignRoles(online, blocks);
@@ -492,13 +495,15 @@ final class Game implements Listener {
 
     /** Back to the lobby with the same players, ready for /bh start. */
     private void end(Component result) {
+        // First: the teleport back can change a player's world, which must not count as leaving
+        // a running game, or that player would be reset a second time and lose their inventory.
+        state = State.LOBBY;
         for (Player player : online(players)) {
             reset(player);
             player.showTitle(Title.title(result, Component.empty()));
         }
         seekers.clear();
         sessions.clear();
-        state = State.LOBBY;
         if (arena != null) {
             arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, debugInfoBefore);
             arena = null;
@@ -506,7 +511,7 @@ final class Game implements Listener {
         updateHud();
     }
 
-    /** Gives back everything the game took: look, inventory, game mode, XP bar. */
+    /** Gives back everything the game took: look, inventory, game mode, position, XP bar. */
     private void reset(Player player) {
         undisguise(player);
         player.removePotionEffect(PotionEffectType.BLINDNESS);
