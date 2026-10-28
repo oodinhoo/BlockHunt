@@ -17,7 +17,7 @@ provenance attestation (`gh attestation verify BlockHunt-<version>.jar --repo oo
 Building from source requires **JDK 25** (mandatory since Minecraft 26.1).
 
 ```powershell
-.\gradlew.bat build      # -> build/libs/BlockHunt-0.1.0.jar
+.\gradlew.bat build      # -> build/libs/BlockHunt-1.0.0.jar
 .\gradlew.bat runServer  # starts a local Paper 26.2 test server with the plugin
 ```
 
