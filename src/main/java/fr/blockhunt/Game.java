@@ -4,7 +4,10 @@ import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
@@ -131,6 +134,14 @@ final class Game implements Listener {
         player.showTitle(Title.title(Component.text("BlockHunt", NamedTextColor.GOLD),
                 Component.text("You joined the lobby: " + players.size() + " players")));
         broadcast(Component.text(player.getName() + " joined (" + players.size() + " players).", NamedTextColor.AQUA));
+        Component invite = Component.text("A BlockHunt game is about to start: " + player.getName() + " joined ("
+                + players.size() + " players). ", NamedTextColor.AQUA)
+                .append(link("[Join]", "/bh join", "Join the lobby"));
+        for (Player other : plugin.getServer().getOnlinePlayers()) {
+            if (!players.contains(other.getUniqueId())) {
+                other.sendMessage(invite);
+            }
+        }
         updateHud();
     }
 
@@ -544,9 +555,13 @@ final class Game implements Listener {
         // First: the teleport back can change a player's world, which must not count as leaving
         // a running game, or that player would be reset a second time and lose their inventory.
         state = State.LOBBY;
+        // Everyone stays in the lobby, for the next game: one click to get out of it.
+        Component stay = Component.text("You are in the lobby for the next game. ", NamedTextColor.AQUA)
+                .append(link("[Leave]", "/bh leave", "Leave BlockHunt"));
         for (Player player : online(players)) {
             reset(player);
             player.showTitle(Title.title(result, Component.empty()));
+            player.sendMessage(stay);
         }
         seekers.clear();
         sessions.clear();
@@ -800,6 +815,13 @@ final class Game implements Listener {
         for (Player player : online(players)) {
             player.sendMessage(message);
         }
+    }
+
+    /** A chat word that runs {@code command} when clicked. */
+    private static Component link(String label, String command, String hover) {
+        return Component.text(label, NamedTextColor.GOLD, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand(command))
+                .hoverEvent(HoverEvent.showText(Component.text(hover)));
     }
 
     private static Component countdown(int ticks) {
