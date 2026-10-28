@@ -127,7 +127,30 @@ Once a week:
 
 ## Keeping it consistent
 
-- **The docs-only file list** is written three times: `paths-ignore` and the `changes` job in
-  `ci.yml`, and the "code changed" step in `release.yml`. Change all three together.
-- **The code file list** of `pr-checklist.yml`: add any new kind of code or build file there.
-- **JDK 25** is set in `build.gradle.kts` (toolchain), `ci.yml` and `release.yml`.
+Some settings are written in several places. Change one, change them all.
+
+### The docs-only file list
+
+These files do not change the plugin: `*.md`, `docs/`, `LICENSE` and `.github/ISSUE_TEMPLATE/`.
+When a change touches nothing else, the workflows skip the work. The list is written three
+times, once per case:
+
+| Where | Syntax | When only these files changed |
+|---|---|---|
+| `ci.yml`, `paths-ignore` | `"**.md", "docs/**", ...` | a push to `main` does not start CI |
+| `ci.yml`, job `changes` | `':!*.md' ':!docs' ...` | a pull request skips `build` |
+| `release.yml`, step "Check code changed since the previous release" | `':!*.md' ':!docs' ...` | a release is refused: nothing to publish |
+
+If one copy is forgotten, the workflows disagree. Say a `screenshots/` folder is added to
+`paths-ignore` only: a push of screenshots to `main` no longer builds, but a pull request of
+screenshots still runs the full build, and screenshots alone are enough to publish a release.
+
+### The code file list
+
+`pr-checklist.yml` lists the files that need the checklist ticked: `src/`, Gradle files. It is
+the other way round from the list above: a new kind of code or build file must be added there,
+or its pull requests merge without the checklist.
+
+### The JDK version
+
+JDK 25 is set in `build.gradle.kts` (toolchain), `ci.yml` and `release.yml` (`setup-java`).
