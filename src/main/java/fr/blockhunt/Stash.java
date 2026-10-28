@@ -27,6 +27,9 @@ final class Stash {
 
     /** Empties the inventory and switches to adventure: no flying, no noclip, no block broken or placed. */
     void save(Player player) {
+        // Items in the 2x2 crafting grid or on the cursor are not in getContents(): closing puts
+        // them back in the inventory, or they would land in the kit later and be wiped with it.
+        player.closeInventory();
         PersistentDataContainer pdc = player.getPersistentDataContainer();
         // getContents() has nulls for empty slots: serialize them as explicit empty stacks.
         ItemStack[] contents = Arrays.stream(player.getInventory().getContents())
