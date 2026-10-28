@@ -8,6 +8,8 @@
 
 ## Checklist
 
+<!-- Only for a change to the plugin code or its build (src/, Gradle files): delete this section otherwise. -->
+
 - [ ] `./gradlew build` passes with no warning
 - [ ] Tried in game on the Paper version the plugin targets
 - [ ] README updated if behavior changed
