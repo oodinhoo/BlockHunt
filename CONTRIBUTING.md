@@ -21,7 +21,7 @@ The build must pass with no compiler warning, and runs the unit tests (JUnit and
 that reaches a method MockBukkit does not implement is reported as skipped: the build fails on any
 skipped test, since it proves nothing.
 
-`.\gradlew.bat runServer` starts a local **Paper 26.2** server with the plugin. Try your change in
+`.\gradlew.bat runServer` starts a local **Paper 26.3** server with the plugin. Try your change in
 game, with at least two players for a game, and say in the pull request how you checked it.
 
 ## Code
