@@ -1,6 +1,6 @@
 plugins {
     java
-    // ./gradlew runServer: downloads Paper 26.3 and starts it with the plugin loaded.
+    // ./gradlew runServer: downloads the Paper set in minecraftVersion below and starts it with the plugin.
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
 
