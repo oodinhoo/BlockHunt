@@ -1,7 +1,7 @@
 name: BlockHunt
 version: '${version}'
 main: fr.blockhunt.BlockHuntPlugin
-api-version: '26.2'
+api-version: '26.3'
 description: Hide and seek where hiders are disguised as blocks.
 authors:
   - Odinho

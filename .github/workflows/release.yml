@@ -57,7 +57,7 @@ jobs:
             exit 1
           fi
           echo "JAR=build/libs/BlockHunt-$version.jar" >> "$GITHUB_ENV"
-      # The Paper version the jar is compiled against, shown on the release: 26.2.build.135-stable.
+      # The Paper version the jar is compiled against, shown on the release: 26.3.build.227-stable.
       - name: Read the target Paper version
         id: paper
         run: echo "paper=$(sed -n 's/.*paper-api:\([^"]*\)".*/\1/p' build.gradle.kts | head -1)" >> "$GITHUB_OUTPUT"

@@ -1,11 +1,11 @@
 plugins {
     java
-    // ./gradlew runServer: downloads Paper 26.2 and starts it with the plugin loaded.
+    // ./gradlew runServer: downloads Paper 26.3 and starts it with the plugin loaded.
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
 
 group = "fr.blockhunt"
-version = "1.0.0"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -14,10 +14,10 @@ repositories {
 
 dependencies {
     // 26.x coordinate: no more "-R0.1-SNAPSHOT", the format is <version>.build.<number>-<stage>.
-    compileOnly("io.papermc.paper:paper-api:26.2.build.135-stable")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.227-stable")
 
-    testImplementation("io.papermc.paper:paper-api:26.2.build.135-stable")
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.2:4.117.0")
+    testImplementation("io.papermc.paper:paper-api:26.3.build.227-stable")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.3:4.119.0")
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
 }
@@ -44,7 +44,9 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))
+    // -classfile: JOML 1.10.9, pulled in by paper-api 26.3, ships Java 2 class files with type
+    // annotations, which javac warns about on every compile. Nothing in our code to fix.
+    options.compilerArgs.addAll(listOf("-Xlint:all,-classfile", "-Werror"))
 }
 
 tasks.processResources {
@@ -57,5 +59,5 @@ tasks.processResources {
 }
 
 tasks.runServer {
-    minecraftVersion("26.2")
+    minecraftVersion("26.3")
 }

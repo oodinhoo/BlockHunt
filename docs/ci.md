@@ -37,7 +37,8 @@ Pushes to `main` that only touch documentation do not run CI at all (`paths-igno
 
 - **Skipped tests fail the build.** MockBukkit skips a test that reaches a method it does not
   implement. A skipped test proves nothing, so `build.gradle.kts` turns it into a failure.
-- **Warnings fail the build**: the compiler runs with `-Xlint:all -Werror`.
+- **Warnings fail the build**: the compiler runs with `-Xlint:all,-classfile -Werror`. Only
+  `classfile` is off: it warns about JOML's class files, a Paper dependency, not about our code.
 - **15 minute limit.** A build takes 1 to 3 minutes: past 15, a test is hung.
 - **Artifacts**, downloadable from the run summary:
   - `BlockHunt-jar`: the plugin jar of that commit.
