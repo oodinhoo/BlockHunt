@@ -51,15 +51,18 @@ mode and cannot break, place, drop or pick up anything.
 
 ### The dome
 
-The game is played in a dome: a sphere of `arena-radius` blocks (40 by default) around the arena
-spawn, so a dome above the ground, with the caves right under it. During a game:
+The game is played in a sphere of `arena-radius` blocks (40 by default) around the arena spawn: a
+dome above the ground, and as deep below it, caves included. During a game:
 
-- its players cannot leave it, walking, flying, or with an ender pearl or a chorus fruit;
-- nobody else can enter it, and anyone standing in it when the game starts is set down outside;
+- its players cannot leave it, walking, flying, or with an ender pearl or a chorus fruit. One sent
+  outside by a teleport (another plugin's `/home`, a `/tp`) is brought back within a second; one
+  sent to another world leaves the game;
+- nobody else can enter it. Anyone standing in it when the game starts, or logging in inside it
+  during a game, is set down outside, off their mount if they ride one;
 - its wall shows as cyan particles to whoever comes within 6 blocks of it, from inside or outside.
 
 Nothing is built in the world, and between games the dome is gone: the arena is free to build in.
-Teleports made by the plugin (to the arena and back) and admin commands such as `/tp` go through.
+Teleports by a plugin and admin commands such as `/tp` go through the wall.
 
 ## Playing as a hider
 

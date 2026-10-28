@@ -7,8 +7,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 /**
- * The play area of a running game: a sphere around the arena spawn, so a dome above the ground.
- * Nothing is built: the wall is only drawn, with particles, for whoever comes near it.
+ * The play area of a running game: a sphere around the arena spawn, a dome above the ground and
+ * as deep below it, caves included. Nothing is built: the wall is only drawn, with particles, for
+ * whoever comes near it.
  */
 final class Dome {
 
@@ -28,10 +29,14 @@ final class Dome {
         this.radius = radius;
     }
 
+    /** Where a player of the game is brought back to. */
+    Location center() {
+        return center.clone();
+    }
+
     /** Another world counts as outside. */
     boolean contains(Location location) {
-        return location.getWorld() != null && location.getWorld().equals(center.getWorld())
-                && location.distanceSquared(center) <= radius * radius;
+        return center.getWorld().equals(location.getWorld()) && location.distanceSquared(center) <= radius * radius;
     }
 
     /** Just outside the dome, on the ground, on the side of {@code from}. */
@@ -47,14 +52,14 @@ final class Dome {
         return spot;
     }
 
-    /** Draws the patch of wall facing the player, if they are close enough to the wall to see it. */
+    /**
+     * Draws the patch of wall facing the player, if they are close enough to the wall to see it.
+     * The viewer must be in the dome's world.
+     */
     void show(Player viewer) {
-        Location eye = viewer.getEyeLocation();
-        if (!center.getWorld().equals(eye.getWorld())) {
-            return;
-        }
-        Vector toViewer = eye.toVector().subtract(center.toVector());
-        if (Math.abs(toViewer.length() - radius) > SHOW_DISTANCE) {
+        Vector toViewer = viewer.getEyeLocation().toVector().subtract(center.toVector());
+        // Right at the centre there is no direction to face, and a small dome is within reach.
+        if (toViewer.lengthSquared() < 1.0E-6 || Math.abs(toViewer.length() - radius) > SHOW_DISTANCE) {
             return;
         }
         Vector u = toViewer.normalize();

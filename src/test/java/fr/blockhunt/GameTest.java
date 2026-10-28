@@ -6,6 +6,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
@@ -209,7 +210,7 @@ class GameTest {
         assertTrue(insideDome(move(hider, inArena(11.5))));
     }
 
-    /** An ender pearl or a chorus fruit does not get a player of the game out either. */
+    /** An ender pearl does not get a player of the game out either (chorus fruit: same check). */
     @Test
     void playersCannotPearlOutOfTheDome() {
         plugin.getConfig().set("arena-radius", DOME);
@@ -253,6 +254,68 @@ class GameTest {
         game.leave(alice);
 
         assertTrue(insideDome(move(carol, inArena(9.5))));
+    }
+
+    /** Only the crossing is stopped: a player of the game outside walks back in, an outsider walks out. */
+    @Test
+    void theDomeOnlyStopsTheForbiddenWay() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock hider = hider();
+        hider.setLocation(inArena(11.5));
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setLocation(inArena(9.5));
+
+        assertTrue(insideDome(move(hider, inArena(9.5))));
+        assertFalse(insideDome(move(carol, inArena(11.5))));
+    }
+
+    /** Sent out of the dome by another plugin's teleport: back in within a second. */
+    @Test
+    void playersPutOutsideTheDomeAreBroughtBack() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock hider = hider();
+        hider.setLocation(inArena(20));
+
+        server.getScheduler().performTicks(20);
+        assertTrue(insideDome(hider.getLocation()));
+    }
+
+    /** Someone who logs back in inside the dome during a game is set down outside. */
+    @Test
+    void outsidersLoggingInInsideTheDomeAreSentOut() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setLocation(inArena(3));
+
+        server.getPluginManager().callEvent(new PlayerJoinEvent(carol, Component.empty()));
+        assertFalse(insideDome(carol.getLocation()));
+    }
+
+    /** The wall is drawn twice a second for a player near it, and the game carries on. */
+    @Test
+    void drawingTheWallKeepsTheGameRunning() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        PlayerMock hider = hider();
+        hider.setLocation(inArena(9.5));
+
+        server.getScheduler().performTicks(40);
+        assertEquals(GameMode.ADVENTURE, hider.getGameMode());
+        assertTrue(insideDome(hider.getLocation()));
+    }
+
+    /** With the dome on, the end of the game still takes everyone back where they stood. */
+    @Test
+    void theEndOfTheGameTakesEveryoneBackThroughTheDome() {
+        plugin.getConfig().set("arena-radius", DOME);
+        start();
+        game.leave(alice);
+
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
     }
 
     /** arena-radius 0: no dome at all. */
