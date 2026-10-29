@@ -935,7 +935,7 @@ final class Game implements Listener {
             return;
         }
         String label = event.getMessage().substring(1).split(" ", 2)[0].toLowerCase(Locale.ROOT);
-        label = label.substring(label.indexOf(':') + 1); // blockhunt:bh is /bh
+        label = label.startsWith("blockhunt:") ? label.substring("blockhunt:".length()) : label;
         if (!label.equals("bh") && !label.equals("blockhunt")) {
             event.setCancelled(true);
             deny(event.getPlayer(), "Only /bh works during a game.");

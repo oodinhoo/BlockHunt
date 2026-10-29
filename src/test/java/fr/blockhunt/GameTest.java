@@ -317,6 +317,18 @@ class GameTest {
         assertFalse(command(seeker, "/BlockHunt leave").isCancelled());
         assertFalse(command(seeker, "/blockhunt:bh leave").isCancelled());
         assertTrue(command(seeker, "/bhx").isCancelled(), "a command that only starts like /bh");
+        assertTrue(command(seeker, "/other:bh").isCancelled(), "another plugin's bh");
+    }
+
+    @Test
+    void theSeekingPhaseOnlyAllowsBlockHuntCommandsToo() {
+        plugin.getConfig().set("hide-seconds", 1);
+        start();
+        server.getScheduler().performTicks(RELEASE);
+
+        assertTrue(command(seeker(), "/home").isCancelled());
+        assertTrue(command(hider(), "/sell hand").isCancelled());
+        assertFalse(command(seeker(), "/bh leave").isCancelled());
     }
 
     @Test
@@ -326,6 +338,8 @@ class GameTest {
         assertFalse(command(alice, "/home").isCancelled(), "in the lobby");
         start();
         assertFalse(command(outsider, "/home").isCancelled(), "not in the game");
+        game.leave(alice);
+        assertFalse(command(alice, "/home").isCancelled(), "out of the game once they left it");
     }
 
     /** Two players joined, the default minimum: the game starts on its own after the countdown. */

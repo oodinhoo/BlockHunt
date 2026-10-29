@@ -43,7 +43,7 @@ back at the end of the game, or when they leave it, and they are taken back wher
 before the game. This holds even after a server crash (on their next join); a player whose world
 was deleted meanwhile lands at the main world's spawn. During the game, everyone is in adventure
 mode and cannot break, place, drop or pick up anything. The only commands that work for them are
-`/bh` ones: another plugin's `/home`, `/tpa` or `/sell` would get a frozen seeker out of the wait,
+`/bh` (or `/blockhunt`) ones: another plugin's `/home`, `/tpa` or `/sell` would get a frozen seeker out of the wait,
 or a copied block out of the game.
 
 | Phase | Default | What happens |
