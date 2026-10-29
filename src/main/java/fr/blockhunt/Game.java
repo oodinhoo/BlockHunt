@@ -46,6 +46,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -152,7 +153,37 @@ final class Game implements Listener {
         updateHud();
     }
 
+    /** /bh leave. A hider giving up while hunted is a find for the nearest seeker. */
     void leave(Player player) {
+        if (state == State.SEEKING && isHider(player)) {
+            creditNearestSeeker(player);
+        }
+        exit(player);
+    }
+
+    /** Finds of this player in the running game, 0 outside a game: the sidebar's "Your finds". */
+    int finds(Player player) {
+        Session session = sessions.get(player.getUniqueId());
+        return session == null ? 0 : session.finds;
+    }
+
+    /** The seeker closest to the hider gets the find, as if they had hit them. */
+    private void creditNearestSeeker(Player hider) {
+        online(seekers).stream()
+                .filter(seeker -> seeker.getWorld().equals(hider.getWorld()))
+                .min(Comparator.comparingDouble(seeker -> seeker.getLocation().distanceSquared(hider.getLocation())))
+                .ifPresent(seeker -> {
+                    Session session = sessions.get(seeker.getUniqueId());
+                    if (session != null) {
+                        session.finds++;
+                    }
+                    broadcast(Component.text(hider.getName() + " gave up: a point for " + seeker.getName() + ".",
+                            NamedTextColor.GOLD));
+                });
+    }
+
+    /** Out of the game and the lobby, whatever the reason: /bh leave, a disconnection, another world. */
+    private void exit(Player player) {
         if (!players.remove(player.getUniqueId())) {
             deny(player, "You are not in the game.");
             return;
@@ -1001,7 +1032,7 @@ final class Game implements Listener {
 
     private void drop(Player player) {
         if (playing(player)) {
-            leave(player);
+            exit(player);
         } else {
             undisguise(player);
         }

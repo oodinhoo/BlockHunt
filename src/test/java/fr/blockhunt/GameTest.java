@@ -343,6 +343,85 @@ class GameTest {
         assertTrue(titles(hider).contains("Hiders win: no seeker left."));
     }
 
+    /** A hider about to be found who runs /bh leave gives the nearest seeker the point. */
+    @Test
+    void aHiderGivingUpIsAFindForTheNearestSeeker() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("seekers", 2);
+        PlayerMock carol = joinCarol();
+        start();
+        Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
+        PlayerMock far = roles.get(true).get(0);
+        PlayerMock near = roles.get(true).get(1);
+        PlayerMock hider = roles.get(false).get(0);
+        far.setLocation(inArena(-8.5));
+        near.setLocation(inArena(2.5));
+        hider.setLocation(inArena(0.5));
+        server.getScheduler().performTicks(RELEASE);
+        messages(near);
+        titles(near);
+
+        game.leave(hider);
+
+        assertTrue(messages(near).contains(hider.getName() + " gave up: a point for " + near.getName() + "."));
+        assertTrue(titles(near).contains("Seekers win!"), "the last hider giving up ends the game like a find");
+    }
+
+    /** The point itself, counted in the find tally: two hiders, so the game goes on to read it. */
+    @Test
+    void aHiderGivingUpAddsToTheSeekersFinds() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+
+        game.leave(roles.get(false).get(0));
+
+        assertEquals(1, game.finds(seeker));
+    }
+
+    /** Before the seekers are released, nobody is near enough to deserve it. */
+    @Test
+    void aHiderLeavingWhileHidingCountsForNobody() {
+        PlayerMock carol = joinCarol();
+        start();
+        PlayerMock seeker = roles(alice, bob, carol).get(true).get(0);
+        messages(seeker);
+
+        game.leave(roles(alice, bob, carol).get(false).get(0));
+
+        assertTrue(messages(seeker).stream().noneMatch(message -> message.contains("gave up")));
+        assertEquals(0, game.finds(seeker));
+    }
+
+    /** A disconnection is not a give-up: a network timeout must not hand out a point. */
+    @Test
+    void aHiderDisconnectingCountsForNobody() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        messages(seeker);
+
+        roles.get(false).get(0).disconnect();
+
+        assertTrue(messages(seeker).stream().noneMatch(message -> message.contains("gave up")));
+        assertEquals(0, game.finds(seeker));
+    }
+
+    /** Only a hider gives up: a seeker leaving hands nobody a point. */
+    @Test
+    void aSeekerLeavingCountsForNobody() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("seekers", 2);
+        PlayerMock carol = joinCarol();
+        start();
+        server.getScheduler().performTicks(RELEASE);
+        List<PlayerMock> seekers = roles(alice, bob, carol).get(true);
+        messages(seekers.get(1));
+
+        game.leave(seekers.get(0));
+
+        assertTrue(messages(seekers.get(1)).stream().noneMatch(message -> message.contains("gave up")));
+        assertEquals(0, game.finds(seekers.get(1)));
+    }
+
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {
