@@ -549,6 +549,42 @@ class GameTest {
         }
     }
 
+    // --- The end-of-game recap ----------------------------------------------------------------
+
+    /** Three players: a seeker finds one hider, then the clock runs out on the other. */
+    @Test
+    void theRecapSaysHowLongWhoHeldOutAndEveryonesFinds() {
+        plugin.getConfig().set("seek-seconds", 2);
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        PlayerMock found = roles.get(false).get(0);
+        PlayerMock survivor = roles.get(false).get(1);
+        hit(seeker, found);
+        messages(seeker);
+
+        server.getScheduler().performTicks(40); // what is left of the 2 seeking seconds, and more
+
+        List<String> said = messages(seeker);
+        assertTrue(said.contains("Game over after 0:03: Hiders win!"), said.toString());
+        assertTrue(said.contains("Held out: " + survivor.getName()), said.toString());
+        // Best first, then by name.
+        List<String> none = Stream.of(found, survivor).map(PlayerMock::getName).sorted().toList();
+        assertTrue(said.contains("Finds: " + seeker.getName() + " 1, " + none.get(0) + " 0, " + none.get(1) + " 0"),
+                said.toString());
+    }
+
+    @Test
+    void whenTheLastHiderIsFoundNobodyHeldOut() {
+        plugin.getConfig().set("hide-seconds", 1);
+        start();
+        server.getScheduler().performTicks(RELEASE);
+        messages(alice);
+
+        hit(seeker(), hider());
+
+        assertTrue(messages(alice).contains("Nobody held out."));
+    }
+
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {

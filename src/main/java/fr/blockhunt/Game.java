@@ -47,6 +47,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * The single game of the server: a lobby of players, then a hiding phase (seekers blinded and
@@ -105,6 +106,8 @@ final class Game implements Listener {
     private World arena;
     /** Holds the play area of the running game. */
     private final DomeGuard domeGuard = new DomeGuard(this::playing);
+    /** Server tick the running game started at, for its length in the recap. */
+    private int startTick;
     /** Ticks before the lobby starts a game on its own, -1 while it waits for players. */
     private int countdown = -1;
     /** reducedDebugInfo of the arena before the game, given back when it ends. */
@@ -278,6 +281,7 @@ final class Game implements Listener {
         }
         // A countdown cut short by /bh start must not resume when this game ends.
         countdown = -1;
+        startTick = plugin.getServer().getCurrentTick();
         assignRoles(online, blocks);
     }
 
@@ -683,8 +687,26 @@ final class Game implements Listener {
         }
     }
 
+    /** How long the game lasted, who held out, and everyone's finds, best first, then by name. */
+    private List<Component> recap(Component result) {
+        int seconds = (plugin.getServer().getCurrentTick() - startTick) / 20;
+        List<Player> online = online(players);
+        String heldOut = online.stream().filter(this::isHider).map(Player::getName).sorted()
+                .collect(Collectors.joining(", "));
+        String finds = online.stream()
+                .sorted(Comparator.comparingInt(this::finds).reversed().thenComparing(Player::getName))
+                .map(player -> player.getName() + " " + finds(player))
+                .collect(Collectors.joining(", "));
+        return List.of(
+                Component.text("Game over after " + clock(seconds) + ": ", NamedTextColor.GOLD).append(result),
+                Component.text(heldOut.isEmpty() ? "Nobody held out." : "Held out: " + heldOut, NamedTextColor.AQUA),
+                Component.text("Finds: " + finds, NamedTextColor.AQUA));
+    }
+
     /** Back to the lobby with the same players, ready for /bh start. */
     private void end(Component result) {
+        // While roles and finds are still there: the reset below clears them.
+        List<Component> recap = recap(result);
         // First: the teleport back can change a player's world, which must not count as leaving
         // a running game, or that player would be reset a second time and lose their inventory.
         state = State.LOBBY;
@@ -696,6 +718,7 @@ final class Game implements Listener {
             try {
                 reset(player);
                 player.showTitle(Title.title(result, Component.empty()));
+                recap.forEach(player::sendMessage);
                 player.sendMessage(stay);
             } catch (RuntimeException e) {
                 plugin.getLogger().log(Level.SEVERE, "Could not give " + player.getName() + " ("

@@ -34,9 +34,10 @@ the `plugins/` folder of a **Paper 26.3** server.
 
 Joining shows a title and a lobby sidebar that stays on screen: the status (*Need 1 more*,
 *Starts in 0:25*, or *No spawn set* for the admin), the players who joined, the length of both
-phases, and how to leave. During the game, the same sidebar shows your role. At the end, the lobby
-comes back with the same players, and the countdown for the next game starts again: a chat
-message with a clickable **[Leave]** gets a player out of it.
+phases, and how to leave. During the game, the same sidebar shows your role. At the end, a recap
+in chat says how long the game lasted, who held out, and everyone's finds, best first (a hider
+giving up counts as a find). Then the lobby comes back with the same players, and the countdown
+for the next game starts again: a chat message with a clickable **[Leave]** gets a player out of it.
 
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
 back at the end of the game, or when they leave it, and they are taken back where they stood
