@@ -858,8 +858,11 @@ final class Game implements Listener {
         player.sendActionBar(Component.text("You are now " + Kit.name(block.getType()) + ".", NamedTextColor.GREEN));
     }
 
-    /** Seekers wait frozen while the hiders hide. The dome: {@link DomeGuard}. */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    /**
+     * Seekers wait frozen while the hiders hide. Before the dome ({@link DomeGuard}, HIGH): a
+     * frozen move is cancelled, never checked against the wall.
+     */
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
         if (event.hasChangedPosition() && state == State.HIDING
                 && seekers.contains(event.getPlayer().getUniqueId())) {
