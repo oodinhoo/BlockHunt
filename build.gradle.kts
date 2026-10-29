@@ -26,6 +26,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
     // MockBukkit aborts a test that reaches a method it does not implement: JUnit reports it as
     // skipped, not failed. A skipped test proves nothing, so it fails the build.
     addTestListener(object : TestListener {
@@ -38,10 +39,6 @@ tasks.test {
             }
         }
     })
-}
-
-tasks.test {
-    finalizedBy(tasks.jacocoTestReport)
 }
 
 tasks.jacocoTestReport {
