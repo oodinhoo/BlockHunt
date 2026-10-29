@@ -12,6 +12,8 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +59,17 @@ class DisguiseTest {
         assertFalse(Disguise.canSolidifyAt(cell(Material.AIR, Material.AIR)), "over the void");
         assertFalse(Disguise.canSolidifyAt(cell(Material.WATER, Material.STONE)), "in water");
         assertFalse(Disguise.canSolidifyAt(cell(Material.SHORT_GRASS, Material.STONE)), "in grass");
+    }
+
+    @Test
+    void blocksDrawnAsNothingAreInvisible() {
+        for (Material invisible : List.of(Material.AIR, Material.CAVE_AIR, Material.VOID_AIR, Material.BARRIER,
+                Material.LIGHT, Material.STRUCTURE_VOID, Material.MOVING_PISTON)) {
+            assertTrue(Disguise.isInvisible(invisible), invisible.name());
+        }
+        assertFalse(Disguise.isInvisible(Material.STONE));
+        assertFalse(Disguise.isInvisible(Material.TORCH), "not solid, but drawn");
+        assertFalse(Disguise.isInvisible(Material.GLASS), "see-through, but drawn");
     }
 
     @Test

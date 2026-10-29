@@ -163,7 +163,7 @@ final class Disguise {
     /** Drawn as nothing, by a display and by the client alike: a hider looking like it is invisible. */
     static boolean isInvisible(Material material) {
         return material.isAir() || material == Material.BARRIER || material == Material.LIGHT
-                || material == Material.STRUCTURE_VOID;
+                || material == Material.STRUCTURE_VOID || material == Material.MOVING_PISTON;
     }
 
     /**

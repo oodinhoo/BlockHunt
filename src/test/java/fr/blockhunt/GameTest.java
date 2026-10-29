@@ -393,17 +393,37 @@ class GameTest {
     void aHiderCannotCopyABarrier() {
         start();
         PlayerMock hider = hider();
-        Block barrier = arena.getBlockAt(5, 70, 5);
-        barrier.setType(Material.BARRIER);
 
-        server.getPluginManager().callEvent(new PlayerInteractEvent(hider, Action.RIGHT_CLICK_BLOCK,
-                hider.getInventory().getItemInMainHand(), barrier, BlockFace.UP, EquipmentSlot.HAND));
+        rightClick(hider, Material.BARRIER);
 
         assertTrue(actionBars(hider).contains("You cannot copy this block."));
         assertEquals(Material.STONE, hider.getInventory().getItem(0).getType(), "still the starting look");
     }
 
-    /** Air, barriers and the like in the starting list would start a hider invisible. */
+    /** The copy itself, then its cooldown: what the barrier test above is refused against. */
+    @Test
+    void aHiderCopiesASolidBlockOncePerCooldown() {
+        start();
+        PlayerMock hider = hider();
+
+        rightClick(hider, Material.OAK_PLANKS);
+        assertTrue(actionBars(hider).contains("You are now oak planks."));
+        assertEquals(Material.OAK_PLANKS, hider.getInventory().getItem(0).getType());
+
+        rightClick(hider, Material.STONE);
+        assertTrue(actionBars(hider).stream().anyMatch(bar -> bar.startsWith("You can change again in")));
+        assertEquals(Material.OAK_PLANKS, hider.getInventory().getItem(0).getType());
+    }
+
+    /** A right-click on a block of that material, a few blocks from the arena spawn. */
+    private void rightClick(PlayerMock player, Material material) {
+        Block block = arena.getBlockAt(5, 70, 5);
+        block.setType(material);
+        server.getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK,
+                player.getInventory().getItemInMainHand(), block, BlockFace.UP, EquipmentSlot.HAND));
+    }
+
+    /** Air, barriers and the like in the starting list would start a hider invisible (the rule: DisguiseTest). */
     @Test
     void invisibleBlocksAreLeftOutOfTheStartingList() {
         plugin.getConfig().set("blocks", List.of("AIR", "BARRIER", "LIGHT", "STRUCTURE_VOID", "STONE"));
