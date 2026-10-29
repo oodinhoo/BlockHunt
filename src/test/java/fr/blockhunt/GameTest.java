@@ -13,6 +13,8 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -487,6 +489,34 @@ class GameTest {
 
         assertTrue(pdc.has(new NamespacedKey(plugin, "inventory-unreadable")));
         assertFalse(pdc.has(new NamespacedKey(plugin, "inventory")));
+    }
+
+    /** A start that fails for lack of players in the arena takes the ones already there back home. */
+    @Test
+    void aStartThatFailsSendsThePlayersAlreadyTeleportedBack() {
+        server.getPluginManager().registerEvents(new RefuseTeleportsOf(bob), plugin);
+
+        game.start(alice);
+
+        assertTrue(messages(alice).contains("Not enough players reached the arena."));
+        assertEquals(new Location(lobby, 10, 70, 0), alice.getLocation(), "back where she stood");
+        assertEquals(GameMode.SURVIVAL, alice.getGameMode(), "no game started");
+    }
+
+    /** Cancels one player's teleports, as a mount or another plugin would. */
+    public static final class RefuseTeleportsOf implements Listener {
+        private final PlayerMock player;
+
+        RefuseTeleportsOf(PlayerMock player) {
+            this.player = player;
+        }
+
+        @EventHandler
+        public void onTeleport(PlayerTeleportEvent event) {
+            if (event.getPlayer().equals(player)) {
+                event.setCancelled(true);
+            }
+        }
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
