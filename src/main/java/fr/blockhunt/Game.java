@@ -9,6 +9,7 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
+import org.bukkit.GameMode;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -91,6 +92,10 @@ final class Game implements Listener {
     /** Everyone who joined, in the lobby or in the running game. */
     private final Set<UUID> players = new LinkedHashSet<>();
     private final Set<UUID> seekers = new HashSet<>();
+    /** Players back during the game they left: in it, watching, neither hiders nor seekers. */
+    private final Set<UUID> spectators = new HashSet<>();
+    /** Players of the running game who disconnected: spectators if they come back before it ends. */
+    private final Set<UUID> gone = new HashSet<>();
     private final Map<UUID, Session> sessions = new HashMap<>();
     /** One per joined player, from /bh join to leaving: the lobby, then their role in a game. */
     private final Map<UUID, Sidebar> sidebars = new HashMap<>();
@@ -188,6 +193,7 @@ final class Game implements Listener {
         if (state != State.LOBBY) {
             reset(player);
             seekers.remove(player.getUniqueId());
+            spectators.remove(player.getUniqueId());
         }
         removeSidebar(player);
         checkEnd();
@@ -415,7 +421,9 @@ final class Game implements Listener {
             if (sidebar == null) {
                 continue;
             }
-            if (session == null) {
+            if (spectators.contains(player.getUniqueId())) {
+                sidebar.show(spectatorLines());
+            } else if (session == null) {
                 sidebar.show(lobbyLines());
             } else if (seekers.contains(player.getUniqueId())) {
                 sidebar.show(seekerLines(player, session));
@@ -500,6 +508,14 @@ final class Game implements Listener {
             countdown = -1;
             start(Audience.audience(plugin.getServer().getConsoleSender(), Audience.audience(online(players))));
         }
+    }
+
+    private List<Sidebar.Line> spectatorLines() {
+        return List.of(
+                new Sidebar.Line("Role", Component.text("Spectator", NamedTextColor.GRAY)),
+                Sidebar.EMPTY,
+                new Sidebar.Line("Hiders left", Component.text(hidersLeft())),
+                new Sidebar.Line("Seekers", Component.text(seekers.size())));
     }
 
     private List<Sidebar.Line> seekerLines(Player seeker, Session session) {
@@ -737,6 +753,8 @@ final class Game implements Listener {
             }
         }
         seekers.clear();
+        spectators.clear();
+        gone.clear();
         sessions.clear();
         if (arena != null) {
             arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, debugInfoBefore);
@@ -772,7 +790,7 @@ final class Game implements Listener {
     }
 
     private int hidersLeft() {
-        return players.size() - seekers.size();
+        return players.size() - seekers.size() - spectators.size();
     }
 
     private boolean playing(Player player) {
@@ -780,7 +798,8 @@ final class Game implements Listener {
     }
 
     private boolean isHider(Player player) {
-        return playing(player) && !seekers.contains(player.getUniqueId());
+        return playing(player) && !seekers.contains(player.getUniqueId())
+                && !spectators.contains(player.getUniqueId());
     }
 
     private void disguise(Player player, BlockData block) {
@@ -913,10 +932,35 @@ final class Game implements Listener {
         if (domeGuard.contains(event.getPlayer().getLocation())) {
             domeGuard.sendOut(event.getPlayer());
         }
+        if (state != State.LOBBY && gone.remove(event.getPlayer().getUniqueId())) {
+            spectate(event.getPlayer());
+        }
+    }
+
+    /** Back during the game they left: they watch the rest of it from the arena, out of play. */
+    private void spectate(Player player) {
+        Location back = player.getLocation();
+        // Before joining the game again: this world change must not count as leaving it.
+        if (!player.teleport(plugin.getConfig().getLocation("spawn"))) {
+            deny(player, "Could not take you to the game you left.");
+            return;
+        }
+        stash.save(player, back);
+        player.setGameMode(GameMode.SPECTATOR);
+        players.add(player.getUniqueId());
+        spectators.add(player.getUniqueId());
+        sidebars.put(player.getUniqueId(), new Sidebar(player));
+        player.showBossBar(bar);
+        player.showTitle(Title.title(Component.text("Spectator", NamedTextColor.GRAY),
+                Component.text("You left this game: watch the end of it.")));
+        updateHud();
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        if (playing(event.getPlayer())) {
+            gone.add(event.getPlayer().getUniqueId());
+        }
         drop(event.getPlayer());
         // Out of the lobby too: the lobby then only ever holds online players.
         if (players.remove(event.getPlayer().getUniqueId())) {
