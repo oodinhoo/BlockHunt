@@ -97,6 +97,28 @@ class StashTest {
                 "the next game does not overwrite it");
     }
 
+    /** The same part unreadable after two games: the first one set aside is not lost to the second. */
+    @Test
+    void aSecondUnreadablePartIsKeptNextToTheFirst() {
+        Plugin plugin = MockBukkit.createMockPlugin();
+        Stash stash = new Stash(plugin);
+        PlayerMock player = server.addPlayer();
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        NamespacedKey mode = new NamespacedKey(plugin, "gamemode");
+
+        stash.save(player, player.getLocation());
+        pdc.set(mode, PersistentDataType.STRING, "FLYING");
+        stash.restore(player);
+        stash.save(player, player.getLocation());
+        pdc.set(mode, PersistentDataType.STRING, "SWIMMING");
+        stash.restore(player);
+
+        assertEquals("FLYING", pdc.get(new NamespacedKey(plugin, "gamemode-unreadable"), PersistentDataType.STRING));
+        assertEquals("SWIMMING",
+                pdc.get(new NamespacedKey(plugin, "gamemode-unreadable-2"), PersistentDataType.STRING));
+        assertTrue(player.nextComponentMessage() != null, "the player is told");
+    }
+
     @Test
     void anUnreadableInventoryIsSetAside() {
         Plugin plugin = MockBukkit.createMockPlugin();
