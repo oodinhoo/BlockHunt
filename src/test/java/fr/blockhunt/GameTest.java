@@ -343,6 +343,54 @@ class GameTest {
         assertTrue(titles(hider).contains("Hiders win: no seeker left."));
     }
 
+    /** A hider about to be found who runs /bh leave gives the nearest seeker the point. */
+    @Test
+    void aHiderGivingUpIsAFindForTheNearestSeeker() {
+        plugin.getConfig().set("hide-seconds", 1);
+        plugin.getConfig().set("seekers", 2);
+        PlayerMock carol = joinCarol();
+        start();
+        Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
+        PlayerMock near = roles.get(true).get(0);
+        PlayerMock hider = roles.get(false).get(0);
+        near.setLocation(inArena(2.5));
+        roles.get(true).get(1).setLocation(inArena(-8.5));
+        hider.setLocation(inArena(0.5));
+        server.getScheduler().performTicks(RELEASE);
+        messages(near);
+        titles(near);
+
+        game.leave(hider);
+
+        assertTrue(messages(near).contains(hider.getName() + " gave up: a point for " + near.getName() + "."));
+        assertTrue(titles(near).contains("Seekers win!"), "the last hider giving up ends the game like a find");
+    }
+
+    /** Before the seekers are released, nobody is near enough to deserve it. */
+    @Test
+    void aHiderLeavingWhileHidingCountsForNobody() {
+        PlayerMock carol = joinCarol();
+        start();
+        PlayerMock seeker = roles(alice, bob, carol).get(true).get(0);
+        messages(seeker);
+
+        game.leave(roles(alice, bob, carol).get(false).get(0));
+
+        assertTrue(messages(seeker).stream().noneMatch(message -> message.contains("gave up")));
+    }
+
+    /** A disconnection is not a give-up: a network timeout must not hand out a point. */
+    @Test
+    void aHiderDisconnectingCountsForNobody() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        messages(seeker);
+
+        roles.get(false).get(0).disconnect();
+
+        assertTrue(messages(seeker).stream().noneMatch(message -> message.contains("gave up")));
+    }
+
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {

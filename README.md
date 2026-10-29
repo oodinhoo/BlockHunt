@@ -85,6 +85,8 @@ You are invisible: the others only see the block you are disguised as, following
   one, 15 at 16 blocks, nothing from about 32 blocks, where the taunt is refused and kept. Near the
   end, it takes off only what is left above the last second. Once the seekers are released, your
   sidebar shows what a taunt would take off now. Two per hider.
+- **Giving up** with `/bh leave` once the seekers are released counts as a find for the nearest
+  seeker. A disconnection does not.
 
 ## Playing as a seeker
 
