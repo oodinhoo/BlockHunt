@@ -13,6 +13,9 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -37,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -487,6 +491,62 @@ class GameTest {
 
         assertTrue(pdc.has(new NamespacedKey(plugin, "inventory-unreadable")));
         assertFalse(pdc.has(new NamespacedKey(plugin, "inventory")));
+    }
+
+    /** A start that fails for lack of players in the arena takes the ones already there back home. */
+    @Test
+    void aStartThatFailsSendsThePlayersAlreadyTeleportedBack() {
+        server.getPluginManager().registerEvents(new RefuseTeleports(event -> event.getPlayer().equals(bob)), plugin);
+
+        game.start(alice);
+
+        assertTrue(messages(alice).contains("Not enough players reached the arena."));
+        assertEquals(new Location(lobby, 10, 70, 0), alice.getLocation(), "back where she stood");
+        assertEquals(new Location(lobby, 20, 70, 0), bob.getLocation(), "never left");
+        assertEquals(GameMode.SURVIVAL, alice.getGameMode(), "no game started");
+    }
+
+    /** A way back refused too, by a mount or another plugin: the player is told, not left wondering. */
+    @Test
+    void aRefusedWayBackAfterAFailedStartIsSaid() {
+        server.getPluginManager().registerEvents(new RefuseTeleports(event -> event.getPlayer().equals(bob)
+                || event.getTo().getWorld().equals(lobby)), plugin);
+
+        game.start(alice);
+
+        assertTrue(actionBars(alice).contains("Could not take you back from the arena."));
+    }
+
+    /** The next start, once everyone can reach the arena, takes them back where they really stood. */
+    @Test
+    void aStartAfterAFailedOneTakesEveryoneBackHome() {
+        RefuseTeleports refuse = new RefuseTeleports(event -> event.getPlayer().equals(bob));
+        server.getPluginManager().registerEvents(refuse, plugin);
+        game.start(alice);
+        HandlerList.unregisterAll(refuse);
+        game.join(bob); // left out by the failed start
+
+        start();
+        game.stop();
+
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
+    }
+
+    /** Cancels the teleports it is given, as a mount or another plugin would. */
+    public static final class RefuseTeleports implements Listener {
+        private final Predicate<PlayerTeleportEvent> refused;
+
+        RefuseTeleports(Predicate<PlayerTeleportEvent> refused) {
+            this.refused = refused;
+        }
+
+        @EventHandler
+        public void onTeleport(PlayerTeleportEvent event) {
+            if (refused.test(event)) {
+                event.setCancelled(true);
+            }
+        }
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
