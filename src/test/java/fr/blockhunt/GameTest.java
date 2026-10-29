@@ -20,6 +20,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.potion.PotionEffectType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -282,6 +283,45 @@ class GameTest {
         assertTrue(hit(roles.get(false).get(0), seekers.get(0)).isCancelled(), "a hider hitting a seeker");
         assertEquals(2, roles(alice, bob, carol).get(true).size(), "still two seekers");
         assertTrue(titles(alice).isEmpty(), "the game did not end");
+    }
+
+    /** The only seeker rage-quitting must not hand the hiders the game: a hider takes their place. */
+    @Test
+    void aHiderTakesThePlaceOfTheLastSeekerWhoLeaves() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        List<PlayerMock> hiders = roles.get(false);
+        messages(hiders.get(0));
+
+        game.leave(roles.get(true).get(0));
+
+        assertEquals(1, hiders.stream().filter(GameTest::isSeeker).count(), "one hider became the seeker");
+        assertEquals(GameMode.ADVENTURE, hiders.get(0).getGameMode(), "the game goes on");
+        assertTrue(messages(hiders.get(0)).stream().anyMatch(message -> message.contains("takes the seeker's place")));
+    }
+
+    /** During the hiding phase, the new seeker waits blind like the one they replace. */
+    @Test
+    void aHiderReplacingTheSeekerWhileHidingIsBlinded() {
+        PlayerMock carol = joinCarol();
+        start();
+        Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
+
+        game.leave(roles.get(true).get(0));
+
+        PlayerMock replacement = roles.get(false).stream().filter(GameTest::isSeeker).findFirst().orElseThrow();
+        assertTrue(replacement.hasPotionEffect(PotionEffectType.BLINDNESS));
+    }
+
+    /** With a single hider left, nobody can take the seeker's place: the hiders win. */
+    @Test
+    void theLastSeekerLeavingWithOneHiderLeftIsAHidersWin() {
+        start();
+        PlayerMock hider = hider();
+        titles(hider);
+
+        game.leave(seeker());
+
+        assertTrue(titles(hider).contains("Hiders win: no seeker left."));
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */

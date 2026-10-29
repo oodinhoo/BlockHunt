@@ -51,6 +51,10 @@ or a copied block out of the game.
 | Hiding | 30 s | Seekers are blinded and frozen, hiders run and hide |
 | Seeking | 5 min | Seekers hunt. Time out: hiders win |
 
+When the last seeker leaves the game, a hider picked at random takes their place, blind and frozen
+like them during the hiding phase. With a single hider left, nobody is left to hunt them: the
+hiders win.
+
 ### The dome
 
 The game is played in a sphere of `arena-radius` blocks (40 by default) around the arena spawn: a

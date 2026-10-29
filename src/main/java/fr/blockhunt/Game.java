@@ -528,9 +528,7 @@ final class Game implements Listener {
     }
 
     private void found(Player hider, Player seeker) {
-        undisguise(hider);
-        seekers.add(hider.getUniqueId());
-        Kit.seeker(hider);
+        becomeSeeker(hider);
         Session session = sessions.get(seeker.getUniqueId());
         if (session != null) {
             session.finds++;
@@ -544,6 +542,29 @@ final class Game implements Listener {
         updateBar();
         updateHud();
         checkEnd();
+    }
+
+    /** Out of their disguise, into the seekers' kit; while the others hide, blind like the other seekers. */
+    private void becomeSeeker(Player hider) {
+        undisguise(hider);
+        seekers.add(hider.getUniqueId());
+        Kit.seeker(hider);
+        if (state == State.HIDING) {
+            hider.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, ticksLeft, 0, false, false));
+        }
+    }
+
+    /** The last seeker left: a hider picked at random hunts the others, rather than a free win. */
+    private void replaceSeeker() {
+        List<Player> hiders = online(players).stream().filter(this::isHider).toList();
+        Player replacement = hiders.get(ThreadLocalRandom.current().nextInt(hiders.size()));
+        becomeSeeker(replacement);
+        replacement.showTitle(Title.title(Component.text("Seeker", NamedTextColor.RED),
+                Component.text("The seeker left: you take their place.")));
+        broadcast(Component.text("The seeker left: " + replacement.getName() + " takes the seeker's place.",
+                NamedTextColor.GOLD));
+        updateBar();
+        updateHud();
     }
 
     /** Every hider rings at their own position, heard by this seeker only. */
@@ -628,6 +649,8 @@ final class Game implements Listener {
         }
         if (hidersLeft() == 0) {
             end(Component.text("Seekers win!", NamedTextColor.RED));
+        } else if (seekers.isEmpty() && hidersLeft() >= 2) {
+            replaceSeeker();
         } else if (seekers.isEmpty()) {
             end(Component.text("Hiders win: no seeker left.", NamedTextColor.GREEN));
         }
