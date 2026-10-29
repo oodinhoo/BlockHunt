@@ -62,6 +62,12 @@ public final class BlockHuntPlugin extends JavaPlugin {
                                     game.start(context.getSource().getSender());
                                     return Command.SINGLE_SUCCESS;
                                 }))
+                        .then(Commands.literal("stop")
+                                .requires(source -> source.getSender().hasPermission(ADMIN))
+                                .executes(context -> {
+                                    game.abort(context.getSource().getSender());
+                                    return Command.SINGLE_SUCCESS;
+                                }))
                         .then(Commands.literal("setspawn")
                                 .requires(source -> source.getSender().hasPermission(ADMIN))
                                 .executes(context -> asPlayer(context, this::setSpawn)))
