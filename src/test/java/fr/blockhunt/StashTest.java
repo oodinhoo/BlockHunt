@@ -3,11 +3,14 @@ package fr.blockhunt;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +20,9 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The one path that must never lose data: a player's own inventory around a game. */
@@ -60,6 +65,77 @@ class StashTest {
         stash.restore(player);
         assertEquals(GameMode.SURVIVAL, player.getGameMode());
         assertEquals(ItemStack.of(Material.DIAMOND, 5), player.getInventory().getItem(3));
+    }
+
+    /**
+     * Stored data it cannot read: the rest is still given back, and the unreadable part is set
+     * aside for an admin rather than failing every join, or being overwritten by the next game.
+     */
+    @Test
+    void unreadableDataIsSetAsideAndTheRestRestored() {
+        Plugin plugin = MockBukkit.createMockPlugin();
+        Stash stash = new Stash(plugin);
+        PlayerMock player = server.addPlayer();
+        player.getInventory().setItem(3, ItemStack.of(Material.DIAMOND, 5));
+        stash.save(player, player.getLocation());
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        pdc.set(new NamespacedKey(plugin, "gamemode"), PersistentDataType.STRING, "FLYING");
+        pdc.set(new NamespacedKey(plugin, "position"), PersistentDataType.STRING, "not a position");
+
+        stash.restore(player);
+
+        assertEquals(ItemStack.of(Material.DIAMOND, 5), player.getInventory().getItem(3), "the readable part");
+        assertEquals("FLYING", pdc.get(new NamespacedKey(plugin, "gamemode-unreadable"), PersistentDataType.STRING));
+        assertEquals("not a position",
+                pdc.get(new NamespacedKey(plugin, "position-unreadable"), PersistentDataType.STRING));
+        assertFalse(pdc.has(new NamespacedKey(plugin, "gamemode")), "set aside, not read again on every join");
+        assertFalse(pdc.has(new NamespacedKey(plugin, "position")));
+
+        stash.save(player, player.getLocation());
+        stash.restore(player);
+        assertEquals("FLYING", pdc.get(new NamespacedKey(plugin, "gamemode-unreadable"), PersistentDataType.STRING),
+                "the next game does not overwrite it");
+    }
+
+    /** The same part unreadable after two games: the first one set aside is not lost to the second. */
+    @Test
+    void aSecondUnreadablePartIsKeptNextToTheFirst() {
+        Plugin plugin = MockBukkit.createMockPlugin();
+        Stash stash = new Stash(plugin);
+        PlayerMock player = server.addPlayer();
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        NamespacedKey mode = new NamespacedKey(plugin, "gamemode");
+
+        stash.save(player, player.getLocation());
+        pdc.set(mode, PersistentDataType.STRING, "FLYING");
+        stash.restore(player);
+        stash.save(player, player.getLocation());
+        pdc.set(mode, PersistentDataType.STRING, "SWIMMING");
+        stash.restore(player);
+
+        assertEquals("FLYING", pdc.get(new NamespacedKey(plugin, "gamemode-unreadable"), PersistentDataType.STRING));
+        assertEquals("SWIMMING",
+                pdc.get(new NamespacedKey(plugin, "gamemode-unreadable-2"), PersistentDataType.STRING));
+        assertTrue(player.nextComponentMessage() != null, "the player is told");
+    }
+
+    @Test
+    void anUnreadableInventoryIsSetAside() {
+        Plugin plugin = MockBukkit.createMockPlugin();
+        Stash stash = new Stash(plugin);
+        PlayerMock player = server.addPlayer();
+        player.setGameMode(GameMode.CREATIVE);
+        stash.save(player, player.getLocation());
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        byte[] garbage = {1, 2, 3};
+        pdc.set(new NamespacedKey(plugin, "inventory"), PersistentDataType.BYTE_ARRAY, garbage);
+
+        stash.restore(player);
+
+        assertEquals(GameMode.CREATIVE, player.getGameMode(), "the readable part");
+        assertArrayEquals(garbage, pdc.get(new NamespacedKey(plugin, "inventory-unreadable"),
+                PersistentDataType.BYTE_ARRAY));
+        assertFalse(pdc.has(new NamespacedKey(plugin, "inventory")));
     }
 
     /** Closing puts crafting grid and cursor items back in the inventory, before it is saved. */

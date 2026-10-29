@@ -57,6 +57,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Level;
 
 /**
  * The single game of the server: a lobby of players, then a hiding phase (seekers blinded and
@@ -696,9 +697,17 @@ final class Game implements Listener {
         Component stay = Component.text("You are in the lobby for the next game. ", NamedTextColor.AQUA)
                 .append(link("[Leave]", "/bh leave", "Leave BlockHunt"));
         for (Player player : online(players)) {
-            reset(player);
-            player.showTitle(Title.title(result, Component.empty()));
-            player.sendMessage(stay);
+            // One player who cannot be restored must not keep the others in the game's state.
+            try {
+                reset(player);
+                player.showTitle(Title.title(result, Component.empty()));
+                player.sendMessage(stay);
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.SEVERE, "Could not give " + player.getName() + " ("
+                        + player.getUniqueId() + ") everything back at the end of the game.", e);
+                player.sendMessage(Component.text("The game ended, but something went wrong giving you "
+                        + "everything back: rejoin, or tell an admin.", NamedTextColor.RED));
+            }
         }
         seekers.clear();
         sessions.clear();
@@ -712,13 +721,17 @@ final class Game implements Listener {
 
     /** Gives back everything the game took: look, inventory, game mode, position, XP bar. */
     private void reset(Player player) {
-        undisguise(player);
-        player.removePotionEffect(PotionEffectType.BLINDNESS);
-        player.hideBossBar(bar);
-        sessions.remove(player.getUniqueId());
-        // Or the sonar, taunt or block cooldowns would follow the player out of the game.
-        Kit.clear(player);
-        stash.restore(player);
+        // Whatever fails before, the player's own inventory, game mode and place come back.
+        try {
+            undisguise(player);
+            player.removePotionEffect(PotionEffectType.BLINDNESS);
+            player.hideBossBar(bar);
+            sessions.remove(player.getUniqueId());
+            // Or the sonar, taunt or block cooldowns would follow the player out of the game.
+            Kit.clear(player);
+        } finally {
+            stash.restore(player);
+        }
         // The XP bar was only ever faked on the client: resend the real one.
         player.sendExperienceChange(player.getExp(), player.getLevel());
     }

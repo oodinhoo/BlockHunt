@@ -1,5 +1,7 @@
 package fr.blockhunt;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -13,6 +15,9 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * What a game takes from a player and gives back: their inventory, game mode and position. All
@@ -24,8 +29,10 @@ final class Stash {
     private final NamespacedKey inventoryKey;
     private final NamespacedKey modeKey;
     private final NamespacedKey positionKey;
+    private final Logger logger;
 
     Stash(Plugin plugin) {
+        logger = plugin.getLogger();
         inventoryKey = new NamespacedKey(plugin, "inventory");
         modeKey = new NamespacedKey(plugin, "gamemode");
         positionKey = new NamespacedKey(plugin, "position");
@@ -58,24 +65,67 @@ final class Stash {
 
     /**
      * No-op for a player with nothing stashed. The position is kept when the teleport fails, as
-     * for a player quitting: their next join takes them back.
+     * for a player quitting: their next join takes them back. A part that cannot be read is set
+     * aside, and the others are still given back; a failure to apply one that was read keeps it,
+     * for the next join.
      */
     void restore(Player player) {
         PersistentDataContainer pdc = player.getPersistentDataContainer();
         byte[] raw = pdc.get(inventoryKey, PersistentDataType.BYTE_ARRAY);
         if (raw != null) {
-            player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
-            pdc.remove(inventoryKey);
+            ItemStack[] items = read(player, inventoryKey, PersistentDataType.BYTE_ARRAY, raw,
+                    ItemStack::deserializeItemsFromBytes);
+            if (items != null) {
+                player.getInventory().setContents(items);
+                pdc.remove(inventoryKey);
+            }
         }
-        String mode = pdc.get(modeKey, PersistentDataType.STRING);
-        if (mode != null) {
-            player.setGameMode(GameMode.valueOf(mode));
-            pdc.remove(modeKey);
+        String stored = pdc.get(modeKey, PersistentDataType.STRING);
+        if (stored != null) {
+            GameMode mode = read(player, modeKey, PersistentDataType.STRING, stored, GameMode::valueOf);
+            if (mode != null) {
+                player.setGameMode(mode);
+                pdc.remove(modeKey);
+            }
         }
         String position = pdc.get(positionKey, PersistentDataType.STRING);
-        if (position != null && player.teleport(location(player.getServer(), position))) {
-            pdc.remove(positionKey);
+        if (position != null) {
+            Location back = read(player, positionKey, PersistentDataType.STRING, position,
+                    value -> location(player.getServer(), value));
+            if (back != null && player.teleport(back)) {
+                pdc.remove(positionKey);
+            }
         }
+    }
+
+    /** The stored value decoded, or null once set aside because it cannot be. */
+    private <T, R> R read(Player player, NamespacedKey key, PersistentDataType<T, T> type, T value,
+            Function<T, R> decode) {
+        try {
+            return decode.apply(value);
+        } catch (RuntimeException e) {
+            setAside(player, key, type, value, e);
+            return null;
+        }
+    }
+
+    /**
+     * Moved to {@code <key>-unreadable} for an admin to look at: left in place, it would fail again on
+     * every join, and the next game's save would overwrite it. One set aside before is kept too.
+     */
+    private <T> void setAside(Player player, NamespacedKey key, PersistentDataType<T, T> type, T value,
+            RuntimeException error) {
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        NamespacedKey aside = new NamespacedKey(key.getNamespace(), key.getKey() + "-unreadable");
+        for (int n = 2; pdc.has(aside); n++) {
+            aside = new NamespacedKey(key.getNamespace(), key.getKey() + "-unreadable-" + n);
+        }
+        pdc.set(aside, type, value);
+        pdc.remove(key);
+        logger.log(Level.SEVERE, "Could not give " + player.getName() + " (" + player.getUniqueId() + ") their "
+                + key.getKey() + " back: kept as " + aside + " in their player data.", error);
+        player.sendMessage(Component.text("Part of what BlockHunt kept for you could not be given back. An admin "
+                + "can recover it from your player data.", NamedTextColor.RED));
     }
 
     /** "world-uuid x y z yaw pitch". A world deleted since then: the main world's spawn. */

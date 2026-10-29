@@ -41,7 +41,9 @@ message with a clickable **[Leave]** gets a player out of it.
 Everyone is teleported to the arena. Each player's inventory and game mode are put aside and given
 back at the end of the game, or when they leave it, and they are taken back where they stood
 before the game. This holds even after a server crash (on their next join); a player whose world
-was deleted meanwhile lands at the main world's spawn. During the game, everyone is in adventure
+was deleted meanwhile lands at the main world's spawn. A part of it that cannot be read back is
+logged in the server console and kept in the player's data, under a `blockhunt:<part>-unreadable`
+key (`-2`, `-3` for later ones), while the rest is given back. During the game, everyone is in adventure
 mode and cannot break, place, drop or pick up anything. The only commands that work for them are
 `/bh` (or `/blockhunt`) ones: another plugin's `/home`, `/tpa` or `/sell` would get a frozen seeker out of the wait,
 or a copied block out of the game.

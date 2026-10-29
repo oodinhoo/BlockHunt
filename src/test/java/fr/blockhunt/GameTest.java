@@ -5,8 +5,10 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
@@ -19,6 +21,8 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffectType;
 import org.junit.jupiter.api.AfterEach;
@@ -33,9 +37,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -420,6 +428,65 @@ class GameTest {
 
         assertTrue(messages(seekers.get(1)).stream().noneMatch(message -> message.contains("gave up")));
         assertEquals(0, game.finds(seekers.get(1)));
+    }
+
+    /** One player who cannot be restored must not keep the players after them, or the game, from ending. */
+    @Test
+    void aPlayerWhoCannotBeRestoredDoesNotStopTheEndForTheOthers() {
+        PlayerMock broken = new PlayerMock(server, "broken") {
+            @Override
+            public void sendExperienceChange(float progress, int level) {
+                throw new IllegalStateException("a client that cannot take its XP bar back");
+            }
+        };
+        server.addPlayer(broken);
+        broken.setLocation(new Location(lobby, 30, 70, 0));
+        // The broken player first, so the others are restored after the failure.
+        game.leave(alice);
+        game.leave(bob);
+        game.join(broken);
+        game.join(alice);
+        game.join(bob);
+        start();
+        List<LogRecord> logged = new ArrayList<>();
+        plugin.getLogger().addHandler(new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                logged.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        messages(broken);
+
+        assertDoesNotThrow(game::stop);
+
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
+        assertEquals(false, arena.getGameRuleValue(GameRules.REDUCED_DEBUG_INFO), "the rest of the end ran");
+        assertTrue(logged.stream().anyMatch(record -> record.getLevel() == Level.SEVERE
+                && record.getMessage().contains("broken")), "the failure is in the server log");
+        assertTrue(messages(broken).stream().anyMatch(message -> message.contains("tell an admin")),
+                "the player is told");
+    }
+
+    /** Stashed data left unreadable by a crash must not fail the player's every join. */
+    @Test
+    void joiningWithUnreadableStashedDataSetsItAside() {
+        PlayerMock player = new PlayerMock(server, "crashed");
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        pdc.set(new NamespacedKey(plugin, "inventory"), PersistentDataType.BYTE_ARRAY, new byte[] {1, 2, 3});
+
+        assertDoesNotThrow(() -> server.addPlayer(player));
+
+        assertTrue(pdc.has(new NamespacedKey(plugin, "inventory-unreadable")));
+        assertFalse(pdc.has(new NamespacedKey(plugin, "inventory")));
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
