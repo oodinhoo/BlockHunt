@@ -58,6 +58,10 @@ When the last seeker leaves the game, a hider picked at random takes their place
 like them during the hiding phase. With a single hider left, nobody is left to hunt them: the
 hiders win.
 
+A player who disconnects during a game is out of it. Back before it ends, they watch the rest of
+it as a spectator, inside the dome, neither hider nor seeker: their things are put aside again and
+come back at the end with everyone's, or sooner with `/bh leave`.
+
 ### The dome
 
 The game is played in a sphere of `arena-radius` blocks (40 by default) around the arena spawn: a
