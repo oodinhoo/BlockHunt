@@ -7,6 +7,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
@@ -383,6 +384,58 @@ class GameTest {
     void failedAutoStartTellsThePlayersWhy() {
         plugin.getConfig().set("blocks", List.of("NOT_A_BLOCK"));
         server.getScheduler().performTicks(ONE_SECOND_COUNTDOWN);
+
+        assertTrue(messages(alice).contains("No valid block in config.yml."));
+    }
+
+    /** A barrier is solid but drawn invisible: copying one would make the hider invisible. */
+    @Test
+    void aHiderCannotCopyABarrier() {
+        start();
+        PlayerMock hider = hider();
+
+        rightClick(hider, Material.BARRIER);
+
+        assertTrue(actionBars(hider).contains("You cannot copy this block."));
+        assertEquals(Material.STONE, hider.getInventory().getItem(0).getType(), "still the starting look");
+    }
+
+    /** The copy itself, then its cooldown: what the barrier test above is refused against. */
+    @Test
+    void aHiderCopiesASolidBlockOncePerCooldown() {
+        start();
+        PlayerMock hider = hider();
+
+        rightClick(hider, Material.OAK_PLANKS);
+        assertTrue(actionBars(hider).contains("You are now oak planks."));
+        assertEquals(Material.OAK_PLANKS, hider.getInventory().getItem(0).getType());
+
+        rightClick(hider, Material.STONE);
+        assertTrue(actionBars(hider).stream().anyMatch(bar -> bar.startsWith("You can change again in")));
+        assertEquals(Material.OAK_PLANKS, hider.getInventory().getItem(0).getType());
+    }
+
+    /** A right-click on a block of that material, a few blocks from the arena spawn. */
+    private void rightClick(PlayerMock player, Material material) {
+        Block block = arena.getBlockAt(5, 70, 5);
+        block.setType(material);
+        server.getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK,
+                player.getInventory().getItemInMainHand(), block, BlockFace.UP, EquipmentSlot.HAND));
+    }
+
+    /** Air, barriers and the like in the starting list would start a hider invisible (the rule: DisguiseTest). */
+    @Test
+    void invisibleBlocksAreLeftOutOfTheStartingList() {
+        plugin.getConfig().set("blocks", List.of("AIR", "BARRIER", "LIGHT", "STRUCTURE_VOID", "STONE"));
+        start();
+
+        assertEquals(Material.STONE, hider().getInventory().getItem(0).getType());
+    }
+
+    @Test
+    void aStartingListOfInvisibleBlocksOnlyIsInvalid() {
+        plugin.getConfig().set("blocks", List.of("AIR", "BARRIER"));
+        game.start(alice);
 
         assertTrue(messages(alice).contains("No valid block in config.yml."));
     }

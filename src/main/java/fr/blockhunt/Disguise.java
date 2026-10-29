@@ -3,6 +3,7 @@ package fr.blockhunt;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -157,6 +158,12 @@ final class Disguise {
         for (Player viewer : player.getServer().getOnlinePlayers()) {
             viewer.showPlayer(plugin, player);
         }
+    }
+
+    /** Drawn as nothing, by a display and by the client alike: a hider looking like it is invisible. */
+    static boolean isInvisible(Material material) {
+        return material.isAir() || material == Material.BARRIER || material == Material.LIGHT
+                || material == Material.STRUCTURE_VOID || material == Material.MOVING_PISTON;
     }
 
     /**

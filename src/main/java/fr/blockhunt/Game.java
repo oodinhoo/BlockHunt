@@ -190,7 +190,7 @@ final class Game implements Listener {
         }
         List<Material> blocks = plugin.getConfig().getStringList("blocks").stream()
                 .map(Material::matchMaterial)
-                .filter(material -> material != null && material.isBlock())
+                .filter(material -> material != null && material.isBlock() && !Disguise.isInvisible(material))
                 .toList();
         if (blocks.isEmpty()) {
             sender.sendMessage(Component.text("No valid block in config.yml.", NamedTextColor.RED));
@@ -771,8 +771,10 @@ final class Game implements Listener {
             deny(player, "You can change again in " + (cooldownLeft + 19) / 20 + "s.");
             return;
         }
-        // A display does not draw block entities (chests, signs, beds...): it would be invisible.
-        if (!block.getType().isSolid() || block.getState(false) instanceof TileState) {
+        // A display does not draw block entities (chests, signs, beds...), nor barriers and other
+        // blocks drawn invisible: the hider would be invisible.
+        if (!block.getType().isSolid() || Disguise.isInvisible(block.getType())
+                || block.getState(false) instanceof TileState) {
             deny(player, "You cannot copy this block.");
             return;
         }
