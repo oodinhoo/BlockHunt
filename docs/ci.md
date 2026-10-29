@@ -43,6 +43,8 @@ Pushes to `main` that only touch documentation do not run CI at all (`paths-igno
 - **Artifacts**, downloadable from the run summary:
   - `BlockHunt-jar`: the plugin jar of that commit.
   - `test-reports`, only when the build fails: the HTML report and the XML results.
+  - `coverage`: how much of the code the tests run (JaCoCo, `index.html` for a reader, XML for
+    tools). Report only: no threshold fails the build yet. Locally: `build/reports/jacoco/test/`.
 - A new push to a pull request cancels its build still running. Each build of `main` runs to the end.
 
 ## Checklist: `checklist`
