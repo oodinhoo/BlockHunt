@@ -11,6 +11,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -293,6 +294,52 @@ class GameTest {
         assertTrue(titles(alice).contains("Game stopped."));
         assertRestored(alice, Material.DIAMOND, 10);
         assertRestored(bob, Material.EMERALD, 20);
+    }
+
+    // --- Commands during a game ----------------------------------------------------------------
+
+    private PlayerCommandPreprocessEvent command(PlayerMock player, String line) {
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(player, line);
+        server.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    /** Another plugin's /home would take a frozen seeker anywhere, or /sell hand the copied block. */
+    @Test
+    void playersOfAGameCanOnlyRunBlockHuntCommands() {
+        start();
+        PlayerMock seeker = seeker();
+
+        assertTrue(command(seeker, "/home").isCancelled(), "/home while frozen");
+        assertTrue(command(hider(), "/sell hand").isCancelled(), "/sell with the copied block in hand");
+        assertTrue(actionBars(seeker).contains("Only /bh works during a game."));
+        assertFalse(command(seeker, "/bh leave").isCancelled());
+        assertFalse(command(seeker, "/BlockHunt leave").isCancelled());
+        assertFalse(command(seeker, "/blockhunt:bh leave").isCancelled());
+        assertTrue(command(seeker, "/bhx").isCancelled(), "a command that only starts like /bh");
+        assertTrue(command(seeker, "/other:bh").isCancelled(), "another plugin's bh");
+    }
+
+    @Test
+    void theSeekingPhaseOnlyAllowsBlockHuntCommandsToo() {
+        plugin.getConfig().set("hide-seconds", 1);
+        start();
+        server.getScheduler().performTicks(RELEASE);
+
+        assertTrue(command(seeker(), "/home").isCancelled());
+        assertTrue(command(hider(), "/sell hand").isCancelled());
+        assertFalse(command(seeker(), "/bh leave").isCancelled());
+    }
+
+    @Test
+    void commandsWorkOutsideAGame() {
+        PlayerMock outsider = server.addPlayer();
+
+        assertFalse(command(alice, "/home").isCancelled(), "in the lobby");
+        start();
+        assertFalse(command(outsider, "/home").isCancelled(), "not in the game");
+        game.leave(alice);
+        assertFalse(command(alice, "/home").isCancelled(), "out of the game once they left it");
     }
 
     /** Two players joined, the default minimum: the game starts on its own after the countdown. */
