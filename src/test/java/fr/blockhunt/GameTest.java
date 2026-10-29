@@ -29,6 +29,9 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -109,7 +112,7 @@ class GameTest {
     @Test
     void seekerChangingWorldLeavesTheGame() {
         start();
-        PlayerMock seeker = alice.getInventory().contains(Kit.SONAR) ? alice : bob;
+        PlayerMock seeker = seeker();
         seeker.teleport(server.addSimpleWorld("elsewhere").getSpawnLocation());
 
         assertRestored(alice, Material.DIAMOND, 10);
@@ -121,19 +124,32 @@ class GameTest {
     /** /bh start with hide-seconds 1: the seekers are released, and one tick of seeking is gone. */
     private static final int RELEASE = 21;
 
+    private static boolean isSeeker(PlayerMock player) {
+        return player.getInventory().contains(Kit.SONAR);
+    }
+
     private PlayerMock seeker() {
-        return alice.getInventory().contains(Kit.SONAR) ? alice : bob;
+        return isSeeker(alice) ? alice : bob;
+    }
+
+    /** The players split into seekers (true) and hiders (false). */
+    private static Map<Boolean, List<PlayerMock>> roles(PlayerMock... players) {
+        return Stream.of(players).collect(Collectors.partitioningBy(GameTest::isSeeker));
     }
 
     /** A hit on the target as the client sends it: on a hider's hitbox, on a seeker themselves. */
     private PrePlayerAttackEntityEvent hit(PlayerMock attacker, PlayerMock target) {
-        Entity attacked = target.getInventory().contains(Kit.SONAR) ? target
-                : arena.getEntitiesByClass(Interaction.class).stream()
-                        .min(Comparator.comparingDouble(box -> box.getLocation().distanceSquared(target.getLocation())))
-                        .orElseThrow();
+        Entity attacked = isSeeker(target) ? target : hitboxOf(target);
         PrePlayerAttackEntityEvent event = new PrePlayerAttackEntityEvent(attacker, attacked, false);
         server.getPluginManager().callEvent(event);
         return event;
+    }
+
+    /** The hitbox nearest the hider: tests with two hiders keep them apart. */
+    private Interaction hitboxOf(PlayerMock hider) {
+        return arena.getEntitiesByClass(Interaction.class).stream()
+                .min(Comparator.comparingDouble(box -> box.getLocation().distanceSquared(hider.getLocation())))
+                .orElseThrow();
     }
 
     /** Every title the player was shown since the last check. */
@@ -146,30 +162,59 @@ class GameTest {
         return shown;
     }
 
-    /** Three players, two of them hiders standing apart: a find leaves one hider in the game. */
-    private PlayerMock joinThird() {
+    /** A third player: with one seeker, two hiders, so a find leaves one hider in the game. */
+    private PlayerMock joinCarol() {
         PlayerMock carol = player(Material.GOLD_INGOT, 30);
         game.join(carol);
         return carol;
     }
 
+    /** Three players, one seeker, two hiders standing apart, seekers released. */
+    private Map<Boolean, List<PlayerMock>> seekingWithTwoHiders() {
+        plugin.getConfig().set("hide-seconds", 1);
+        PlayerMock carol = joinCarol();
+        start();
+        Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
+        roles.get(false).get(0).setLocation(inArena(3.5));
+        roles.get(false).get(1).setLocation(inArena(-3.5));
+        server.getScheduler().performTicks(RELEASE);
+        return roles;
+    }
+
     @Test
     void aFoundHiderBecomesASeeker() {
-        plugin.getConfig().set("hide-seconds", 1);
-        PlayerMock carol = joinThird();
-        start();
-        List<PlayerMock> hiders = new ArrayList<>(List.of(alice, bob, carol));
-        PlayerMock seeker = hiders.stream().filter(p -> p.getInventory().contains(Kit.SONAR)).findFirst().orElseThrow();
-        hiders.remove(seeker);
-        hiders.get(0).setLocation(inArena(3.5));
-        hiders.get(1).setLocation(inArena(-3.5));
-        server.getScheduler().performTicks(RELEASE);
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        List<PlayerMock> hiders = roles.get(false);
 
-        hit(seeker, hiders.get(0));
+        hit(roles.get(true).get(0), hiders.get(0));
 
-        assertTrue(hiders.get(0).getInventory().contains(Kit.SONAR), "the found hider got the seeker kit");
-        assertFalse(hiders.get(1).getInventory().contains(Kit.SONAR), "the other hider is still hiding");
+        assertTrue(isSeeker(hiders.get(0)), "the found hider got the seeker kit");
+        assertFalse(isSeeker(hiders.get(1)), "the other hider is still hiding");
         assertEquals(GameMode.ADVENTURE, hiders.get(1).getGameMode(), "the game goes on");
+    }
+
+    /** Only a seeker finds: a hider hitting another hider's disguise changes nothing. */
+    @Test
+    void aHiderHittingAHiderFindsNobody() {
+        List<PlayerMock> hiders = seekingWithTwoHiders().get(false);
+        titles(alice);
+
+        hit(hiders.get(0), hiders.get(1));
+
+        assertFalse(isSeeker(hiders.get(1)), "still a hider");
+        assertEquals(GameMode.ADVENTURE, hiders.get(1).getGameMode(), "the game goes on");
+        assertTrue(titles(alice).isEmpty(), "nobody was found, the game did not end");
+    }
+
+    /** Nobody is found before the seekers are released, even if a seeker reaches a hider. */
+    @Test
+    void aSeekerHittingAHiderWhileHidingFindsNobody() {
+        start();
+
+        hit(seeker(), hider());
+
+        assertFalse(isSeeker(hider()), "still a hider");
+        assertEquals(GameMode.ADVENTURE, alice.getGameMode(), "the game goes on");
     }
 
     @Test
@@ -212,35 +257,40 @@ class GameTest {
         hit(seeker(), hider());
         server.getScheduler().performTicks(1);
 
-        List<String> shown = titles(alice);
-        assertTrue(shown.contains("Seekers win!"));
-        assertFalse(shown.contains("Hiders win!"), "the clock must not end the game a second time");
+        // The found hider also gets "Found!": only the results count here.
+        assertEquals(List.of("Seekers win!"), titles(alice).stream().filter(title -> title.contains("win")).toList(),
+                "the clock must not end the game a second time");
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
     }
 
+    /** A hit on a player rather than on a disguise is cancelled: a seeker has no hitbox to find. */
     @Test
-    void onlyASeekerHittingAHiderFindsThem() {
+    void hittingASeekerIsCancelledAndFindsNobody() {
         plugin.getConfig().set("hide-seconds", 1);
         plugin.getConfig().set("seekers", 2);
-        PlayerMock carol = joinThird();
+        PlayerMock carol = joinCarol();
         start();
         server.getScheduler().performTicks(RELEASE);
-        List<PlayerMock> seekers = new ArrayList<>(List.of(alice, bob, carol));
-        seekers.removeIf(p -> !p.getInventory().contains(Kit.SONAR));
-        PlayerMock hider = List.of(alice, bob, carol).stream().filter(p -> !seekers.contains(p)).findFirst().orElseThrow();
+        Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
+        List<PlayerMock> seekers = roles.get(true);
+        titles(alice);
 
-        assertTrue(hit(seekers.get(0), seekers.get(1)).isCancelled(), "a seeker hitting a seeker does nothing");
-        assertTrue(hit(hider, seekers.get(0)).isCancelled(), "a hider hitting a seeker does nothing");
-        assertFalse(hider.getInventory().contains(Kit.SONAR), "still a hider");
-        assertEquals(GameMode.ADVENTURE, hider.getGameMode(), "the game goes on");
+        assertTrue(hit(seekers.get(0), seekers.get(1)).isCancelled(), "a seeker hitting a seeker");
+        assertTrue(hit(roles.get(false).get(0), seekers.get(0)).isCancelled(), "a hider hitting a seeker");
+        assertEquals(2, roles(alice, bob, carol).get(true).size(), "still two seekers");
+        assertTrue(titles(alice).isEmpty(), "the game did not end");
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {
         start();
+        titles(alice);
 
         game.stop();
 
+        assertTrue(titles(alice).contains("Game stopped."));
         assertRestored(alice, Material.DIAMOND, 10);
         assertRestored(bob, Material.EMERALD, 20);
     }
@@ -331,7 +381,7 @@ class GameTest {
         plugin.getConfig().set("taunts", 1);
         start();
         server.getScheduler().performTicks(21); // seekers released
-        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        PlayerMock hider = hider();
         hider.getInventory().setHeldItemSlot(1); // the rocket
         messages(hider);
 
@@ -355,7 +405,7 @@ class GameTest {
         plugin.getConfig().set("seek-seconds", 10);
         start();
         server.getScheduler().performTicks(21); // seekers released, 199 ticks left
-        PlayerMock hider = alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        PlayerMock hider = hider();
         hider.getInventory().setHeldItemSlot(1);
         hider.setLocation(new Location(arena, 4.5, 70, 0.5)); // worth 26 s
         messages(hider);
@@ -394,7 +444,7 @@ class GameTest {
     }
 
     private PlayerMock hider() {
-        return alice.getInventory().contains(Kit.SONAR) ? bob : alice;
+        return isSeeker(alice) ? bob : alice;
     }
 
     /** A player of the game walks into the wall of the dome: held back inside. */
