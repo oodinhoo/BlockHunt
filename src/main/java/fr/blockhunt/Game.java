@@ -833,7 +833,7 @@ final class Game implements Listener {
 
     /**
      * Once a second: a player of the game found outside the dome goes back to its centre. Only a
-     * teleport can put them there (another plugin's /home, a /tp): walking out is stopped.
+     * teleport can put them there (another plugin, an admin's /tp): walking out is stopped.
      */
     private void bringBackIntoDome() {
         if (dome == null) {
