@@ -23,21 +23,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.entity.FoodLevelChangeEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerSwapHandItemsEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
-import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
@@ -51,7 +41,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -114,8 +103,8 @@ final class Game implements Listener {
     private int phaseTicks;
     /** World of the running game. */
     private World arena;
-    /** Play area of the running game, null between games or with arena-radius 0. */
-    private Dome dome;
+    /** Holds the play area of the running game. */
+    private final DomeGuard domeGuard = new DomeGuard(this::playing);
     /** Ticks before the lobby starts a game on its own, -1 while it waits for players. */
     private int countdown = -1;
     /** reducedDebugInfo of the arena before the game, given back when it ends. */
@@ -124,6 +113,9 @@ final class Game implements Listener {
     Game(Plugin plugin) {
         this.plugin = plugin;
         stash = new Stash(plugin);
+        // Registered here, so whoever registers the game gets its rules for the dome and the kit too.
+        plugin.getServer().getPluginManager().registerEvents(domeGuard, plugin);
+        plugin.getServer().getPluginManager().registerEvents(new Lockdown(this::playing), plugin);
         // Always running: test disguises need ticking outside a game too.
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 1, 1);
     }
@@ -269,14 +261,12 @@ final class Game implements Listener {
         // in it now would watch the hiders hide: set down outside. A radius that is no number of
         // blocks (.inf) means no dome, like 0.
         double radius = plugin.getConfig().getDouble("arena-radius");
-        dome = Double.isFinite(radius) && radius > 0 ? new Dome(spawn, radius) : null;
-        if (dome != null) {
-            for (Player outsider : arena.getPlayers()) {
-                if (!players.contains(outsider.getUniqueId()) && dome.contains(outsider.getLocation())
-                        && !sendOut(outsider)) {
-                    sender.sendMessage(Component.text("Could not move " + outsider.getName() + " out of the dome.",
-                            NamedTextColor.RED));
-                }
+        domeGuard.guard(Double.isFinite(radius) && radius > 0 ? new Dome(spawn, radius) : null);
+        for (Player outsider : arena.getPlayers()) {
+            if (!players.contains(outsider.getUniqueId()) && domeGuard.contains(outsider.getLocation())
+                    && !domeGuard.sendOut(outsider)) {
+                sender.sendMessage(Component.text("Could not move " + outsider.getName() + " out of the dome.",
+                        NamedTextColor.RED));
             }
         }
 
@@ -362,14 +352,12 @@ final class Game implements Listener {
         }
         ticksLeft--;
         // Twice a second: the wall stays on screen for whoever stands near it, without a flood.
-        if (dome != null && ticksLeft % 10 == 0) {
-            for (Player viewer : arena.getPlayers()) {
-                dome.show(viewer);
-            }
+        if (ticksLeft % 10 == 0) {
+            domeGuard.show(arena.getPlayers());
         }
         bar.progress(Math.clamp((float) ticksLeft / phaseTicks, 0f, 1f));
         if (ticksLeft % 20 == 0) {
-            bringBackIntoDome();
+            domeGuard.bringBack(online(players));
             updateBar();
             updateHud();
         }
@@ -722,7 +710,7 @@ final class Game implements Listener {
             arena.setGameRule(GameRules.REDUCED_DEBUG_INFO, debugInfoBefore);
             arena = null;
         }
-        dome = null;
+        domeGuard.guard(null);
         updateHud();
     }
 
@@ -870,151 +858,12 @@ final class Game implements Listener {
         player.sendActionBar(Component.text("You are now " + Kit.name(block.getType()) + ".", NamedTextColor.GREEN));
     }
 
-    // ponytail: someone riding a horse or a boat moves through VehicleMoveEvent, which cannot be
-    // cancelled: an outsider can ride into the dome. Dismount them there if it ever happens.
+    /** Seekers wait frozen while the hiders hide. The dome: {@link DomeGuard}. */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!event.hasChangedPosition()) {
-            return;
-        }
-        Player player = event.getPlayer();
-        if (state == State.HIDING && seekers.contains(player.getUniqueId())) {
+        if (event.hasChangedPosition() && state == State.HIDING
+                && seekers.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
-            return;
-        }
-        if (crossesDome(player, event.getFrom(), event.getTo())) {
-            // Back where they were, but still looking where they turned: cancelling would also
-            // snap the camera back, every tick they keep walking into the wall.
-            Location back = event.getFrom().clone();
-            back.setYaw(event.getTo().getYaw());
-            back.setPitch(event.getTo().getPitch());
-            event.setTo(back);
-            domeMessage(player);
-        }
-    }
-
-    // Ender pearls, chorus fruit, portals. Teleports by a plugin, this one (to the arena and back)
-    // or another (a /spawn), and admin commands such as /tp go through: one that leaves a player
-    // of the game outside the dome is undone within a second, one to another world takes them
-    // out of the game.
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onTeleport(PlayerTeleportEvent event) {
-        TeleportCause cause = event.getCause();
-        if (cause != TeleportCause.PLUGIN && cause != TeleportCause.COMMAND
-                && crossesDome(event.getPlayer(), event.getFrom(), event.getTo())) {
-            event.setCancelled(true);
-            domeMessage(event.getPlayer());
-        }
-    }
-
-    /**
-     * Once a second: a player of the game found outside the dome goes back to its centre. Only a
-     * teleport can put them there (another plugin, an admin's /tp): walking out is stopped.
-     */
-    private void bringBackIntoDome() {
-        if (dome == null) {
-            return;
-        }
-        for (Player player : online(players)) {
-            if (!dome.contains(player.getLocation()) && player.teleport(dome.center())) {
-                player.sendActionBar(Component.text("Back in the dome: the game is played inside.", NamedTextColor.YELLOW));
-            }
-        }
-    }
-
-    /** Sets someone who is not in the game down just outside the dome. False if the teleport is refused. */
-    private boolean sendOut(Player outsider) {
-        outsider.leaveVehicle(); // a passenger cannot be teleported
-        if (!outsider.teleport(dome.outside(outsider.getLocation()))) {
-            return false;
-        }
-        outsider.sendActionBar(Component.text("A BlockHunt game is running in this dome.", NamedTextColor.AQUA));
-        return true;
-    }
-
-    /** A player of the game leaving the dome, or anyone else entering it. */
-    private boolean crossesDome(Player player, Location from, Location to) {
-        if (dome == null || to == null) {
-            return false;
-        }
-        boolean wasIn = dome.contains(from);
-        boolean isIn = dome.contains(to);
-        return playing(player) ? wasIn && !isIn : !wasIn && isIn;
-    }
-
-    private void domeMessage(Player player) {
-        player.sendActionBar(playing(player)
-                ? Component.text("The dome keeps you in the arena.", NamedTextColor.RED)
-                : Component.text("A BlockHunt game is running in this dome.", NamedTextColor.RED));
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player player && playing(player)) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onHunger(FoodLevelChangeEvent event) {
-        if (event.getEntity() instanceof Player player && playing(player)) {
-            event.setCancelled(true);
-        }
-    }
-
-    // An item taken from a frame or an armor stand would land in the kit inventory, which the
-    // end-of-game restore overwrites: the item would be gone for good. Also covers the "at"
-    // variant, which shares this handler list, and so armor stand manipulation that follows it.
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (playing(event.getPlayer())) {
-            event.setCancelled(true);
-        }
-    }
-
-    // The kit stays where it is: no moving, dropping, swapping or picking up during a game.
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (event.getWhoClicked() instanceof Player player && playing(player)) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onDrop(PlayerDropItemEvent event) {
-        if (playing(event.getPlayer())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onSwapHands(PlayerSwapHandItemsEvent event) {
-        if (playing(event.getPlayer())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPickup(EntityPickupItemEvent event) {
-        if (event.getEntity() instanceof Player player && playing(player)) {
-            event.setCancelled(true);
-        }
-    }
-
-    /**
-     * Only /bh during a game: another plugin's /home or /tpa would move a frozen seeker or cross
-     * the dome, its /sell hand or /hat would take the copied block out of the game.
-     */
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onCommand(PlayerCommandPreprocessEvent event) {
-        if (!playing(event.getPlayer())) {
-            return;
-        }
-        String label = event.getMessage().substring(1).split(" ", 2)[0].toLowerCase(Locale.ROOT);
-        label = label.startsWith("blockhunt:") ? label.substring("blockhunt:".length()) : label;
-        if (!label.equals("bh") && !label.equals("blockhunt")) {
-            event.setCancelled(true);
-            deny(event.getPlayer(), "Only /bh works during a game.");
         }
     }
 
@@ -1026,8 +875,8 @@ final class Game implements Listener {
         // Left over by a crash mid-game: the game is gone, the inventory comes back.
         stash.restore(event.getPlayer());
         // Logged out in the arena, back during a game: they would watch the hiders from inside.
-        if (dome != null && dome.contains(event.getPlayer().getLocation())) {
-            sendOut(event.getPlayer());
+        if (domeGuard.contains(event.getPlayer().getLocation())) {
+            domeGuard.sendOut(event.getPlayer());
         }
     }
 
@@ -1083,7 +932,7 @@ final class Game implements Listener {
                 : Component.text((ticks + 19) / 20 + "s", NamedTextColor.GRAY);
     }
 
-    private static void deny(Player player, String message) {
+    static void deny(Player player, String message) {
         player.sendActionBar(Component.text(message, NamedTextColor.RED));
         player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
     }
