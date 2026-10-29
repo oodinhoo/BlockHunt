@@ -57,6 +57,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Level;
 
 /**
  * The single game of the server: a lobby of players, then a hiding phase (seekers blinded and
@@ -696,9 +697,15 @@ final class Game implements Listener {
         Component stay = Component.text("You are in the lobby for the next game. ", NamedTextColor.AQUA)
                 .append(link("[Leave]", "/bh leave", "Leave BlockHunt"));
         for (Player player : online(players)) {
-            reset(player);
-            player.showTitle(Title.title(result, Component.empty()));
-            player.sendMessage(stay);
+            // One player who cannot be restored must not keep the others in the game's state.
+            try {
+                reset(player);
+                player.showTitle(Title.title(result, Component.empty()));
+                player.sendMessage(stay);
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.SEVERE, "Could not give " + player.getName() + " ("
+                        + player.getUniqueId() + ") everything back at the end of the game.", e);
+            }
         }
         seekers.clear();
         sessions.clear();

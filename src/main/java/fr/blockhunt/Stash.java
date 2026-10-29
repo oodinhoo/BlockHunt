@@ -13,6 +13,8 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * What a game takes from a player and gives back: their inventory, game mode and position. All
@@ -24,8 +26,10 @@ final class Stash {
     private final NamespacedKey inventoryKey;
     private final NamespacedKey modeKey;
     private final NamespacedKey positionKey;
+    private final Logger logger;
 
     Stash(Plugin plugin) {
+        logger = plugin.getLogger();
         inventoryKey = new NamespacedKey(plugin, "inventory");
         modeKey = new NamespacedKey(plugin, "gamemode");
         positionKey = new NamespacedKey(plugin, "position");
@@ -58,24 +62,53 @@ final class Stash {
 
     /**
      * No-op for a player with nothing stashed. The position is kept when the teleport fails, as
-     * for a player quitting: their next join takes them back.
+     * for a player quitting: their next join takes them back. A part that cannot be read is set
+     * aside, and the others are still given back.
      */
     void restore(Player player) {
         PersistentDataContainer pdc = player.getPersistentDataContainer();
         byte[] raw = pdc.get(inventoryKey, PersistentDataType.BYTE_ARRAY);
         if (raw != null) {
-            player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
-            pdc.remove(inventoryKey);
+            try {
+                player.getInventory().setContents(ItemStack.deserializeItemsFromBytes(raw));
+                pdc.remove(inventoryKey);
+            } catch (RuntimeException e) {
+                setAside(player, inventoryKey, PersistentDataType.BYTE_ARRAY, raw, e);
+            }
         }
         String mode = pdc.get(modeKey, PersistentDataType.STRING);
         if (mode != null) {
-            player.setGameMode(GameMode.valueOf(mode));
-            pdc.remove(modeKey);
+            try {
+                player.setGameMode(GameMode.valueOf(mode));
+                pdc.remove(modeKey);
+            } catch (RuntimeException e) {
+                setAside(player, modeKey, PersistentDataType.STRING, mode, e);
+            }
         }
         String position = pdc.get(positionKey, PersistentDataType.STRING);
-        if (position != null && player.teleport(location(player.getServer(), position))) {
-            pdc.remove(positionKey);
+        if (position != null) {
+            try {
+                if (player.teleport(location(player.getServer(), position))) {
+                    pdc.remove(positionKey);
+                }
+            } catch (RuntimeException e) {
+                setAside(player, positionKey, PersistentDataType.STRING, position, e);
+            }
         }
+    }
+
+    /**
+     * Moved to {@code <key>-unreadable} for an admin to look at: left in place, it would fail again on
+     * every join, and the next game's save would overwrite it.
+     */
+    private <T> void setAside(Player player, NamespacedKey key, PersistentDataType<T, T> type, T value,
+            RuntimeException error) {
+        PersistentDataContainer pdc = player.getPersistentDataContainer();
+        NamespacedKey aside = new NamespacedKey(key.getNamespace(), key.getKey() + "-unreadable");
+        pdc.set(aside, type, value);
+        pdc.remove(key);
+        logger.log(Level.SEVERE, "Could not give " + player.getName() + " (" + player.getUniqueId() + ") their "
+                + key.getKey() + " back: kept as " + aside + " in their player data.", error);
     }
 
     /** "world-uuid x y z yaw pitch". A world deleted since then: the main world's spawn. */

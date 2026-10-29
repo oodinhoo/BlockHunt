@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -36,6 +37,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -420,6 +422,32 @@ class GameTest {
 
         assertTrue(messages(seekers.get(1)).stream().noneMatch(message -> message.contains("gave up")));
         assertEquals(0, game.finds(seekers.get(1)));
+    }
+
+    /** One player who cannot be restored must not keep the players after them, or the game, from ending. */
+    @Test
+    void aPlayerWhoCannotBeRestoredDoesNotStopTheEndForTheOthers() {
+        PlayerMock broken = new PlayerMock(server, "broken") {
+            @Override
+            public void sendExperienceChange(float progress, int level) {
+                throw new IllegalStateException("a client that cannot take its XP bar back");
+            }
+        };
+        server.addPlayer(broken);
+        broken.setLocation(new Location(lobby, 30, 70, 0));
+        // The broken player first, so the others are restored after the failure.
+        game.leave(alice);
+        game.leave(bob);
+        game.join(broken);
+        game.join(alice);
+        game.join(bob);
+        start();
+
+        assertDoesNotThrow(game::stop);
+
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
+        assertEquals(false, arena.getGameRuleValue(GameRules.REDUCED_DEBUG_INFO), "the rest of the end ran");
     }
 
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
