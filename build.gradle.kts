@@ -1,5 +1,7 @@
 plugins {
     java
+    // Coverage of the unit tests: build/reports/jacoco/test/html. Report only, no threshold yet.
+    jacoco
     // ./gradlew runServer: downloads the Paper set in minecraftVersion below and starts it with the plugin.
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
@@ -24,6 +26,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
     // MockBukkit aborts a test that reaches a method it does not implement: JUnit reports it as
     // skipped, not failed. A skipped test proves nothing, so it fails the build.
     addTestListener(object : TestListener {
@@ -36,6 +39,13 @@ tasks.test {
             }
         }
     })
+}
+
+tasks.jacocoTestReport {
+    reports {
+        xml.required = true // for tools reading the coverage
+        html.required = true // for a reader
+    }
 }
 
 java {

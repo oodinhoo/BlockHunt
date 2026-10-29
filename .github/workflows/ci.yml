@@ -64,6 +64,11 @@ jobs:
             build/reports/tests/
             build/test-results/
           if-no-files-found: ignore
+      # How much of the code the tests run, as HTML and XML. Report only: no threshold yet.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: build/reports/jacoco/test/
       # The plugin jar of this commit, downloadable from the run summary.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
