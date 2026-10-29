@@ -1,5 +1,7 @@
 plugins {
     java
+    // Coverage of the unit tests: build/reports/jacoco/test/html. Report only, no threshold yet.
+    jacoco
     // ./gradlew runServer: downloads the Paper set in minecraftVersion below and starts it with the plugin.
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
@@ -36,6 +38,17 @@ tasks.test {
             }
         }
     })
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    reports {
+        xml.required = true // for tools reading the coverage
+        html.required = true // for a reader
+    }
 }
 
 java {
