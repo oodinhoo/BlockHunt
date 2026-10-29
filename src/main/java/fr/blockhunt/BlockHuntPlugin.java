@@ -8,15 +8,20 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Location;
 import org.bukkit.block.BlockState;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -78,8 +83,9 @@ public final class BlockHuntPlugin extends JavaPlugin {
     }
 
     /**
-     * Once at startup: a value out of range, or that is no whole number (read as 0), is replaced in
-     * memory and said in the console, rather than breaking a game without a word.
+     * Once at startup: a value out of range, or that is no whole number, is replaced in memory only
+     * and said in the console, rather than breaking a game without a word. The admin's file keeps
+     * what they wrote: see {@link #saveSpawn}.
      */
     static void validate(FileConfiguration config, Logger logger) {
         MINIMUMS.forEach((key, minimum) -> {
@@ -101,9 +107,27 @@ public final class BlockHuntPlugin extends JavaPlugin {
 
     private void setSpawn(Player player) {
         getConfig().set("spawn", player.getLocation());
-        saveConfig();
+        try {
+            saveSpawn(new File(getDataFolder(), "config.yml"), player.getLocation());
+        } catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Could not save the arena spawn to config.yml.", e);
+            player.sendActionBar(Component.text("Arena spawn set until the server restarts: it could not be saved.",
+                    NamedTextColor.RED));
+            game.refreshLobby();
+            return;
+        }
         player.sendActionBar(Component.text("Arena spawn set.", NamedTextColor.AQUA));
         game.refreshLobby();
+    }
+
+    /**
+     * Writes only the spawn into the admin's config.yml: saving the whole config would write over
+     * their file the values {@link #validate} replaced in memory.
+     */
+    static void saveSpawn(File file, Location spawn) throws IOException {
+        YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
+        onDisk.set("spawn", spawn);
+        onDisk.save(file);
     }
 
     private static int asPlayer(CommandContext<CommandSourceStack> context, Consumer<Player> action) {

@@ -135,7 +135,8 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 At startup, a duration the game cannot work with is replaced, with a warning in the console that
 names the key: `solidify-seconds`, `hide-seconds` and `seek-seconds` below 1 become 1, cooldowns,
 `countdown-seconds` and `taunts` below 0 become 0, and a value that is not a whole number gets its
-default.
+default. The replacement only lives in memory: `config.yml` keeps what you wrote, `/bh setspawn`
+included.
 
 ## Known limits
 
