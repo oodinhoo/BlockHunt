@@ -674,6 +674,66 @@ class GameTest {
         assertEquals(GameMode.SURVIVAL, quitter.getGameMode());
     }
 
+    /** Gone from one game is not gone from the next: back during another game, no spectator. */
+    @Test
+    void aPlayerBackDuringALaterGameIsNoSpectator() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        hit(roles.get(true).get(0), roles.get(false).get(1)); // the last hider: the game ends
+        game.start(server.getConsoleSender()); // the two left in the lobby
+        assertEquals(GameMode.ADVENTURE, roles.get(true).get(0).getGameMode(), "a later game started");
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SURVIVAL, quitter.getGameMode());
+    }
+
+    /** A spectator who disconnects and comes back again is a spectator again, and still no hider. */
+    @Test
+    void aSpectatorBackAgainIsASpectatorAgain() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        quitter.reconnect();
+        quitter.disconnect();
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SPECTATOR, quitter.getGameMode());
+        titles(quitter);
+        hit(roles.get(true).get(0), roles.get(false).get(1));
+        assertTrue(titles(quitter).contains("Seekers win!"), "still no hider");
+    }
+
+    /** A seeker who disconnects is replaced; back, they watch like anyone else. */
+    @Test
+    void aSeekerBackDuringTheGameWatchesToo() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        seeker.disconnect();
+
+        seeker.reconnect();
+
+        assertEquals(GameMode.SPECTATOR, seeker.getGameMode());
+        assertEquals(1, roles.get(false).stream().filter(GameTest::isSeeker).count(), "a hider took their place");
+    }
+
+    /** The dome keeps a spectator in, like any player of the game. */
+    @Test
+    void theDomeBringsASpectatorBack() {
+        plugin.getConfig().set("arena-radius", DOME);
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        quitter.reconnect();
+        quitter.setLocation(inArena(30.5));
+
+        server.getScheduler().performTicks(20);
+
+        assertTrue(insideDome(quitter.getLocation()));
+    }
+
     /** A spectator can go back to their own things with /bh leave, as any player of the game. */
     @Test
     void aSpectatorCanLeave() {

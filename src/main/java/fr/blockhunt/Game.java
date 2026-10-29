@@ -940,8 +940,10 @@ final class Game implements Listener {
     /** Back during the game they left: they watch the rest of it from the arena, out of play. */
     private void spectate(Player player) {
         Location back = player.getLocation();
-        // Before joining the game again: this world change must not count as leaving it.
-        if (!player.teleport(plugin.getConfig().getLocation("spawn"))) {
+        Location spawn = plugin.getConfig().getLocation("spawn");
+        // Before joining the game again: this world change must not count as leaving it. A spawn
+        // moved to an unloaded world since the start would throw rather than refuse.
+        if (spawn == null || !spawn.isWorldLoaded() || !player.teleport(spawn)) {
             deny(player, "Could not take you to the game you left.");
             return;
         }
