@@ -201,6 +201,15 @@ final class Game implements Listener {
         }
     }
 
+    /** /bh stop: ends the running game with no winner. The lobby countdown is not a game: left as it is. */
+    void abort(Audience sender) {
+        if (state == State.LOBBY) {
+            sender.sendMessage(Component.text("No game to stop.", NamedTextColor.RED));
+            return;
+        }
+        end(Component.text("Game stopped by an admin.", NamedTextColor.RED));
+    }
+
     void start(Audience sender) {
         if (state != State.LOBBY) {
             sender.sendMessage(Component.text("A game is already running.", NamedTextColor.RED));

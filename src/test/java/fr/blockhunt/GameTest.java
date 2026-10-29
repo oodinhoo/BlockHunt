@@ -607,6 +607,26 @@ class GameTest {
         assertTrue(messages(alice).contains("Nobody held out."));
     }
 
+    /** /bh stop: an admin ends a game that goes wrong, with no winner, everyone given back their things. */
+    @Test
+    void anAdminStopsTheGameWithNoWinner() {
+        start();
+        titles(alice);
+
+        game.abort(server.getConsoleSender());
+
+        assertTrue(titles(alice).contains("Game stopped by an admin."));
+        assertRestored(alice, Material.DIAMOND, 10);
+        assertRestored(bob, Material.EMERALD, 20);
+    }
+
+    @Test
+    void stoppingOutsideAGameSaysThereIsNone() {
+        game.abort(alice);
+
+        assertTrue(messages(alice).contains("No game to stop."));
+    }
+
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {

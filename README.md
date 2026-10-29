@@ -107,6 +107,7 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 |---|---|---|
 | `/bh join`, `/bh leave` | none | everyone |
 | `/bh start` | `blockhunt.admin` | operators. Starts at once, without waiting for the countdown |
+| `/bh stop` | `blockhunt.admin` | operators. Ends the running game with no winner and gives everyone their things back. The lobby countdown is left as it is |
 | `/bh setspawn` | `blockhunt.admin` | operators |
 | `/bh disguise <block>` | `blockhunt.admin` | operators. Toggles a disguise outside a game, for testing |
 
