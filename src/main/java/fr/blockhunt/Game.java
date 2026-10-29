@@ -161,6 +161,12 @@ final class Game implements Listener {
         exit(player);
     }
 
+    /** Finds of this player in the running game, 0 outside a game: the sidebar's "Your finds". */
+    int finds(Player player) {
+        Session session = sessions.get(player.getUniqueId());
+        return session == null ? 0 : session.finds;
+    }
+
     /** The seeker closest to the hider gets the find, as if they had hit them. */
     private void creditNearestSeeker(Player hider) {
         online(seekers).stream()
