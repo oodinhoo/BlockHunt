@@ -132,6 +132,11 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 | `arena-radius` | `40` | Radius of the dome around the arena spawn, in blocks. `0` turns it off |
 | `spawn` | none | Arena spawn, written by `/bh setspawn` |
 
+At startup, a duration the game cannot work with is replaced, with a warning in the console that
+names the key: `solidify-seconds`, `hide-seconds` and `seek-seconds` below 1 become 1, cooldowns,
+`countdown-seconds` and `taunts` below 0 become 0, and a value that is not a whole number gets its
+default.
+
 ## Known limits
 
 - **One arena per server.**
