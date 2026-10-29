@@ -573,6 +573,28 @@ class GameTest {
                 said.toString());
     }
 
+    /** A give-up counts as a find, the one who gave up is no longer in it, and everyone left gets it. */
+    @Test
+    void theRecapCountsAGiveUpAndGoesToEveryoneLeft() {
+        plugin.getConfig().set("seek-seconds", 2);
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        PlayerMock quitter = roles.get(false).get(0);
+        PlayerMock survivor = roles.get(false).get(1);
+        game.leave(quitter);
+        messages(seeker);
+        messages(survivor);
+
+        server.getScheduler().performTicks(40);
+
+        String finds = "Finds: " + seeker.getName() + " 1, " + survivor.getName() + " 0";
+        for (PlayerMock player : List.of(seeker, survivor)) {
+            List<String> said = messages(player);
+            assertTrue(said.contains(finds), player.getName() + ": " + said);
+            assertTrue(said.contains("Held out: " + survivor.getName()), player.getName() + ": " + said);
+        }
+    }
+
     @Test
     void whenTheLastHiderIsFoundNobodyHeldOut() {
         plugin.getConfig().set("hide-seconds", 1);
