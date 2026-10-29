@@ -27,7 +27,8 @@ taunt-max-seconds: 30
 taunt-range: 32
 
 # Each hider starts as one of these, at random. Any block is accepted, but full blocks blend in
-# best: a slab or a torch still snaps onto the grid, and stands out there.
+# best: a slab or a torch still snaps onto the grid, and stands out there. Air, barriers, light and
+# structure void are left out: a hider would be invisible.
 blocks:
   - OAK_PLANKS
   - STONE

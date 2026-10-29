@@ -7,6 +7,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
@@ -383,6 +384,38 @@ class GameTest {
     void failedAutoStartTellsThePlayersWhy() {
         plugin.getConfig().set("blocks", List.of("NOT_A_BLOCK"));
         server.getScheduler().performTicks(ONE_SECOND_COUNTDOWN);
+
+        assertTrue(messages(alice).contains("No valid block in config.yml."));
+    }
+
+    /** A barrier is solid but drawn invisible: copying one would make the hider invisible. */
+    @Test
+    void aHiderCannotCopyABarrier() {
+        start();
+        PlayerMock hider = hider();
+        Block barrier = arena.getBlockAt(5, 70, 5);
+        barrier.setType(Material.BARRIER);
+
+        server.getPluginManager().callEvent(new PlayerInteractEvent(hider, Action.RIGHT_CLICK_BLOCK,
+                hider.getInventory().getItemInMainHand(), barrier, BlockFace.UP, EquipmentSlot.HAND));
+
+        assertTrue(actionBars(hider).contains("You cannot copy this block."));
+        assertEquals(Material.STONE, hider.getInventory().getItem(0).getType(), "still the starting look");
+    }
+
+    /** Air, barriers and the like in the starting list would start a hider invisible. */
+    @Test
+    void invisibleBlocksAreLeftOutOfTheStartingList() {
+        plugin.getConfig().set("blocks", List.of("AIR", "BARRIER", "LIGHT", "STRUCTURE_VOID", "STONE"));
+        start();
+
+        assertEquals(Material.STONE, hider().getInventory().getItem(0).getType());
+    }
+
+    @Test
+    void aStartingListOfInvisibleBlocksOnlyIsInvalid() {
+        plugin.getConfig().set("blocks", List.of("AIR", "BARRIER"));
+        game.start(alice);
 
         assertTrue(messages(alice).contains("No valid block in config.yml."));
     }
