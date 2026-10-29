@@ -249,7 +249,9 @@ final class Game implements Listener {
             // Nothing was stashed yet: only their place to give back. Still in the lobby, so the
             // world change does not count as leaving a game.
             for (Player player : online) {
-                player.teleport(back.get(player.getUniqueId()));
+                if (!player.teleport(back.get(player.getUniqueId()))) {
+                    deny(player, "Could not take you back from the arena.");
+                }
             }
             sender.sendMessage(Component.text("Not enough players reached the arena.", NamedTextColor.RED));
             updateHud();
