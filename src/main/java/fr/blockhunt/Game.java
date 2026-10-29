@@ -28,6 +28,7 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -920,6 +922,23 @@ final class Game implements Listener {
     public void onPickup(EntityPickupItemEvent event) {
         if (event.getEntity() instanceof Player player && playing(player)) {
             event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Only /bh during a game: another plugin's /home or /tpa would move a frozen seeker or cross
+     * the dome, its /sell hand or /hat would take the copied block out of the game.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        if (!playing(event.getPlayer())) {
+            return;
+        }
+        String label = event.getMessage().substring(1).split(" ", 2)[0].toLowerCase(Locale.ROOT);
+        label = label.substring(label.indexOf(':') + 1); // blockhunt:bh is /bh
+        if (!label.equals("bh") && !label.equals("blockhunt")) {
+            event.setCancelled(true);
+            deny(event.getPlayer(), "Only /bh works during a game.");
         }
     }
 

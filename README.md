@@ -42,7 +42,9 @@ Everyone is teleported to the arena. Each player's inventory and game mode are p
 back at the end of the game, or when they leave it, and they are taken back where they stood
 before the game. This holds even after a server crash (on their next join); a player whose world
 was deleted meanwhile lands at the main world's spawn. During the game, everyone is in adventure
-mode and cannot break, place, drop or pick up anything.
+mode and cannot break, place, drop or pick up anything. The only commands that work for them are
+`/bh` ones: another plugin's `/home`, `/tpa` or `/sell` would get a frozen seeker out of the wait,
+or a copied block out of the game.
 
 | Phase | Default | What happens |
 |---|---|---|
@@ -55,7 +57,7 @@ The game is played in a sphere of `arena-radius` blocks (40 by default) around t
 dome above the ground, and as deep below it, caves included. During a game:
 
 - its players cannot leave it, walking, flying, or with an ender pearl or a chorus fruit. One sent
-  outside by a teleport (another plugin's `/home`, a `/tp`) is brought back within a second; one
+  outside by a teleport (another plugin, an admin's `/tp`) is brought back within a second; one
   sent to another world leaves the game;
 - nobody else can enter it. Anyone standing in it when the game starts, or logging in inside it
   during a game, is set down outside, off their mount if they ride one;
