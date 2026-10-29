@@ -295,13 +295,28 @@ class GameTest {
         game.leave(roles.get(true).get(0));
 
         assertEquals(1, hiders.stream().filter(GameTest::isSeeker).count(), "one hider became the seeker");
-        assertEquals(GameMode.ADVENTURE, hiders.get(0).getGameMode(), "the game goes on");
+        assertEquals(1, arena.getEntitiesByClass(Interaction.class).size(), "the new seeker's disguise is gone");
         assertTrue(messages(hiders.get(0)).stream().anyMatch(message -> message.contains("takes the seeker's place")));
+        PlayerMock seeker = hiders.stream().filter(GameTest::isSeeker).findFirst().orElseThrow();
+        PlayerMock hider = hiders.stream().filter(p -> p != seeker).findFirst().orElseThrow();
+        hit(seeker, hider);
+        assertTrue(titles(hider).contains("Seekers win!"), "the game went on, and the new seeker can find");
     }
 
-    /** During the hiding phase, the new seeker waits blind like the one they replace. */
+    /** A disconnection goes through the quit event, not /bh leave: same replacement. */
     @Test
-    void aHiderReplacingTheSeekerWhileHidingIsBlinded() {
+    void aHiderTakesThePlaceOfTheLastSeekerWhoDisconnects() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+
+        roles.get(true).get(0).disconnect();
+
+        assertEquals(1, roles.get(false).stream().filter(GameTest::isSeeker).count(), "one hider became the seeker");
+    }
+
+    /** During the hiding phase, the new seeker waits blind and frozen like the one they replace, until released. */
+    @Test
+    void aHiderReplacingTheSeekerWhileHidingWaitsLikeASeeker() {
+        plugin.getConfig().set("hide-seconds", 1);
         PlayerMock carol = joinCarol();
         start();
         Map<Boolean, List<PlayerMock>> roles = roles(alice, bob, carol);
@@ -310,6 +325,10 @@ class GameTest {
 
         PlayerMock replacement = roles.get(false).stream().filter(GameTest::isSeeker).findFirst().orElseThrow();
         assertTrue(replacement.hasPotionEffect(PotionEffectType.BLINDNESS));
+        Location before = replacement.getLocation();
+        assertEquals(before, move(replacement, before.clone().add(1, 0, 0)), "frozen");
+        server.getScheduler().performTicks(RELEASE);
+        assertFalse(replacement.hasPotionEffect(PotionEffectType.BLINDNESS), "released with the others");
     }
 
     /** With a single hider left, nobody can take the seeker's place: the hiders win. */
