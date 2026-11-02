@@ -627,6 +627,128 @@ class GameTest {
         assertTrue(messages(alice).contains("No game to stop."));
     }
 
+    // --- Spectators: back during the game they left ----------------------------------------------
+
+    /** Three players, a hider times out: back during the same game, they watch it from the arena. */
+    @Test
+    void aPlayerBackDuringTheGameTheyLeftWatchesIt() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SPECTATOR, quitter.getGameMode());
+        assertEquals(arena, quitter.getWorld(), "watching from the arena");
+        assertTrue(quitter.getInventory().isEmpty(), "their own inventory is kept aside again");
+        assertTrue(command(quitter, "/home").isCancelled(), "a spectator is in the game's rules too");
+    }
+
+    /** A spectator is no hider: finding the last one ends the game, and the spectator gets everything back. */
+    @Test
+    void aSpectatorIsNoHiderAndGetsEverythingBackAtTheEnd() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        // Where each player stood in the lobby, with what: see setUp and joinCarol.
+        Material own = quitter == alice ? Material.DIAMOND : quitter == bob ? Material.EMERALD : Material.GOLD_INGOT;
+        double homeX = quitter == alice ? 10 : quitter == bob ? 20 : 30;
+        quitter.disconnect();
+        quitter.reconnect();
+        titles(quitter);
+
+        hit(roles.get(true).get(0), roles.get(false).get(1));
+
+        assertTrue(titles(quitter).contains("Seekers win!"), "the spectator did not count as a hider");
+        assertRestored(quitter, own, homeX);
+    }
+
+    /** Back once the game is over: nothing to watch, they are simply themselves again. */
+    @Test
+    void aPlayerBackAfterTheGameEndedIsNoSpectator() {
+        start();
+        PlayerMock quitter = hider();
+        quitter.disconnect(); // the last hider: the game ends
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SURVIVAL, quitter.getGameMode());
+    }
+
+    /** Gone from one game is not gone from the next: back during another game, no spectator. */
+    @Test
+    void aPlayerBackDuringALaterGameIsNoSpectator() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        hit(roles.get(true).get(0), roles.get(false).get(1)); // the last hider: the game ends
+        game.start(server.getConsoleSender()); // the two left in the lobby
+        assertEquals(GameMode.ADVENTURE, roles.get(true).get(0).getGameMode(), "a later game started");
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SURVIVAL, quitter.getGameMode());
+    }
+
+    /** A spectator who disconnects and comes back again is a spectator again, and still no hider. */
+    @Test
+    void aSpectatorBackAgainIsASpectatorAgain() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        quitter.reconnect();
+        quitter.disconnect();
+
+        quitter.reconnect();
+
+        assertEquals(GameMode.SPECTATOR, quitter.getGameMode());
+        titles(quitter);
+        hit(roles.get(true).get(0), roles.get(false).get(1));
+        assertTrue(titles(quitter).contains("Seekers win!"), "still no hider");
+    }
+
+    /** A seeker who disconnects is replaced; back, they watch like anyone else. */
+    @Test
+    void aSeekerBackDuringTheGameWatchesToo() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock seeker = roles.get(true).get(0);
+        seeker.disconnect();
+
+        seeker.reconnect();
+
+        assertEquals(GameMode.SPECTATOR, seeker.getGameMode());
+        assertEquals(1, roles.get(false).stream().filter(GameTest::isSeeker).count(), "a hider took their place");
+    }
+
+    /** The dome keeps a spectator in, like any player of the game. */
+    @Test
+    void theDomeBringsASpectatorBack() {
+        plugin.getConfig().set("arena-radius", DOME);
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        quitter.reconnect();
+        quitter.setLocation(inArena(30.5));
+
+        server.getScheduler().performTicks(20);
+
+        assertTrue(insideDome(quitter.getLocation()));
+    }
+
+    /** A spectator can go back to their own things with /bh leave, as any player of the game. */
+    @Test
+    void aSpectatorCanLeave() {
+        Map<Boolean, List<PlayerMock>> roles = seekingWithTwoHiders();
+        PlayerMock quitter = roles.get(false).get(0);
+        quitter.disconnect();
+        quitter.reconnect();
+
+        game.leave(quitter);
+
+        assertEquals(GameMode.SURVIVAL, quitter.getGameMode());
+        assertEquals(lobby, quitter.getWorld());
+        assertEquals(GameMode.ADVENTURE, roles.get(false).get(1).getGameMode(), "the game goes on");
+    }
+
     /** The plugin disabled mid-game (a server stop, a reload) gives everyone everything back. */
     @Test
     void stoppingThePluginMidGameRestoresEveryone() {
