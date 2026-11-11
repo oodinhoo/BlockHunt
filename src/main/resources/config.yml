@@ -15,9 +15,6 @@ change-cooldown-seconds: 30
 
 seekers: 1
 
-# Seekers' sonar (recovery compass): right-click rings a bell at every hider's position.
-sonar-cooldown-seconds: 45
-
 # Hiders' rocket: a loud sound at their position, paid back by time off the clock.
 taunts: 2
 # The closer to a seeker, the more: taunt-max-seconds right next to one, then down evenly to

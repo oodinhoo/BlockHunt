@@ -1,24 +1,30 @@
 package fr.blockhunt;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 
 import java.util.Locale;
 import java.util.function.Predicate;
 
 /**
- * What players of a running game cannot do: get hurt or hungry, move the kit, take an item in, or
- * run another plugin's commands. Nothing else of the game's state is needed.
+ * What players of a running game cannot do: get hurt or hungry, damage the map's entities, trample
+ * farmland, move the kit, take an item in, or run another plugin's commands. Nothing else of the
+ * game's state is needed.
  */
 final class Lockdown implements Listener {
 
@@ -31,6 +37,32 @@ final class Lockdown implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
         if (event.getEntity() instanceof Player player && playing.test(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    // A hit on an item frame or a painting damages it before PrePlayerAttackEntityEvent is fired
+    // (vanilla's skipAttackInteraction), so Game#onAttack cannot stop it: stop the damage itself.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onHit(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && playing.test(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** An empty frame or a painting hit is not damaged but broken. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBreakHanging(HangingBreakByEntityEvent event) {
+        if (event.getRemover() instanceof Player player && playing.test(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** Adventure mode still tramples farmland: the arena's fields would not survive a game. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onTrample(PlayerInteractEvent event) {
+        if (event.getAction() == Action.PHYSICAL && event.getClickedBlock() != null
+                && event.getClickedBlock().getType() == Material.FARMLAND && playing.test(event.getPlayer())) {
             event.setCancelled(true);
         }
     }

@@ -35,7 +35,7 @@ public final class BlockHuntPlugin extends JavaPlugin {
     /** The smallest value each duration or count works with: 0 solidify-seconds melts every tick. */
     private static final Map<String, Integer> MINIMUMS = Map.of(
             "solidify-seconds", 1, "hide-seconds", 1, "seek-seconds", 1, "countdown-seconds", 0,
-            "change-cooldown-seconds", 0, "sonar-cooldown-seconds", 0, "taunts", 0);
+            "change-cooldown-seconds", 0, "taunts", 0);
 
     private Game game;
 
