@@ -7,7 +7,7 @@ and become indistinguishable from the map. Seekers hit suspicious blocks to find
 is found joins the seekers. Seekers win when nobody is left hiding, hiders win when the clock runs
 out.
 
-![BlockHunt: a hider turns into a block, snaps onto the grid and copies a bookshelf, a seeker finds them, the sonar and the hot or cold bar, a taunt near a seeker, the arena dome](docs/blockhunt.gif)
+![BlockHunt: a hider turns into a block, snaps onto the grid and copies a bookshelf, a seeker finds them, the hot or cold bar, a taunt near a seeker, the arena dome](docs/blockhunt.gif)
 
 ## Building
 
@@ -98,8 +98,6 @@ You are invisible: the others only see the block you are disguised as, following
 ## Playing as a seeker
 
 - **Hit a suspicious block.** If it is a hider, they are found and join the seekers.
-- **Sonar** (recovery compass, slot 2): right-click to hear a bell at every hider's position. Every
-  45 seconds. Not a plain compass, which WorldEdit uses as its teleport wand.
 - **Hot or cold**: your XP level is the distance to the nearest hider, the action bar says *Hot!*,
   *Warm...* or *Cold*.
 
@@ -130,7 +128,6 @@ Both roles get a sidebar with the game state, and a boss bar with the time left.
 | `solidify-seconds` | `3` | Time standing still before turning solid |
 | `change-cooldown-seconds` | `30` | Cooldown between two block changes |
 | `seekers` | `1` | Seekers at the start (at least one hider is always left) |
-| `sonar-cooldown-seconds` | `45` | Cooldown of the seekers' sonar |
 | `taunts` | `2` | Taunts per hider and per game |
 | `taunt-max-seconds` | `30` | Time a taunt takes off the clock right next to a seeker. `0` turns taunts off |
 | `taunt-range` | `32` | Distance to the nearest seeker at which a taunt takes nothing off, and is refused |

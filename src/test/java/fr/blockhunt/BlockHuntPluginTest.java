@@ -30,7 +30,7 @@ class BlockHuntPluginTest {
     /** Each key and the smallest value the game works with, stated here on their own. */
     private static final Map<String, Integer> MINIMUMS = Map.of(
             "solidify-seconds", 1, "hide-seconds", 1, "seek-seconds", 1, "countdown-seconds", 0,
-            "change-cooldown-seconds", 0, "sonar-cooldown-seconds", 0, "taunts", 0);
+            "change-cooldown-seconds", 0, "taunts", 0);
 
     private final List<String> warnings = new ArrayList<>();
 

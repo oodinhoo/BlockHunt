@@ -55,9 +55,9 @@ import java.util.stream.Collectors;
  * frozen), then a seeking phase. A hider found by a seeker becomes a seeker. Seekers win when
  * no hider is left, hiders win when the time runs out.
  *
- * <p>Seekers carry a sonar (a sound at every hider) and read the distance to the nearest hider
- * on their XP bar. Hiders read their progress towards solid on theirs, and can taunt: a loud
- * sound at their position that takes time off the clock.
+ * <p>Seekers read the distance to the nearest hider on their XP bar. Hiders read their progress
+ * towards solid on theirs, and can taunt: a loud sound at their position that takes time off the
+ * clock.
  */
 // ponytail: one arena per server. Make Game per-arena, keyed by name, if a server ever needs two.
 final class Game implements Listener {
@@ -426,7 +426,7 @@ final class Game implements Listener {
             } else if (session == null) {
                 sidebar.show(lobbyLines());
             } else if (seekers.contains(player.getUniqueId())) {
-                sidebar.show(seekerLines(player, session));
+                sidebar.show(seekerLines(session));
                 if (state == State.SEEKING) {
                     proximity(player);
                 }
@@ -518,15 +518,14 @@ final class Game implements Listener {
                 new Sidebar.Line("Seekers", Component.text(seekers.size())));
     }
 
-    private List<Sidebar.Line> seekerLines(Player seeker, Session session) {
+    private List<Sidebar.Line> seekerLines(Session session) {
         return List.of(
                 new Sidebar.Line("Role", Component.text("Seeker", NamedTextColor.RED)),
                 Sidebar.EMPTY,
                 new Sidebar.Line("Hiders left", Component.text(hidersLeft())),
                 new Sidebar.Line("Seekers", Component.text(seekers.size())),
                 Sidebar.EMPTY,
-                new Sidebar.Line("Your finds", Component.text(session.finds)),
-                new Sidebar.Line("Sonar", countdown(seeker.getCooldown(Kit.SONAR))));
+                new Sidebar.Line("Your finds", Component.text(session.finds)));
     }
 
     private List<Sidebar.Line> hiderLines(Disguise disguise, Session session) {
@@ -621,25 +620,6 @@ final class Game implements Listener {
                 NamedTextColor.GOLD));
         updateBar();
         updateHud();
-    }
-
-    /** Every hider rings at their own position, heard by this seeker only. */
-    private void sonar(Player seeker, ItemStack compass) {
-        if (state != State.SEEKING) {
-            deny(seeker, "The sonar works once seekers are released.");
-            return;
-        }
-        if (seeker.hasCooldown(compass)) {
-            deny(seeker, "Sonar recharging.");
-            return;
-        }
-        for (Disguise disguise : disguises.values()) {
-            if (isHider(disguise.player())) {
-                // Volume 4: heard up to 64 blocks away.
-                seeker.playSound(disguise.player().getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 4.0f, 1.0f);
-            }
-        }
-        seeker.setCooldown(compass, plugin.getConfig().getInt("sonar-cooldown-seconds") * 20);
     }
 
     /**
@@ -772,7 +752,7 @@ final class Game implements Listener {
             player.removePotionEffect(PotionEffectType.BLINDNESS);
             player.hideBossBar(bar);
             sessions.remove(player.getUniqueId());
-            // Or the sonar, taunt or block cooldowns would follow the player out of the game.
+            // Or the taunt or block cooldowns would follow the player out of the game.
             Kit.clear(player);
         } finally {
             stash.restore(player);
@@ -825,8 +805,9 @@ final class Game implements Listener {
         Disguise target = disguises.values().stream()
                 .filter(disguise -> disguise.owns(event.getAttacked())).findFirst().orElse(null);
         if (target == null) {
-            // Frames, armor stands, animals: a seeker swinging at everything must not wreck the
-            // map, and a hidden hider hitting a mob would give their position away.
+            // Armor stands, animals: a seeker swinging at everything must not wreck the map, and a
+            // hidden hider hitting a mob would give their position away. Frames and paintings are
+            // damaged before this event: Lockdown stops that damage.
             if (playing(event.getPlayer())) {
                 event.setCancelled(true);
             }
@@ -843,8 +824,8 @@ final class Game implements Listener {
     }
 
     /**
-     * Seeker with the sonar: rings at every hider. Hider with the rocket: taunt. Disguised player clicking a
-     * block of the map: takes its look, once per cooldown.
+     * Hider with the rocket: taunt. Disguised player clicking a block of the map: takes its look,
+     * once per cooldown.
      */
     // Not ignoreCancelled: a click in the air always arrives cancelled, and arenas are often
     // protected, while none of this changes anything in the world.
@@ -859,11 +840,6 @@ final class Game implements Listener {
         }
         Player player = event.getPlayer();
         ItemStack inHand = player.getInventory().getItemInMainHand();
-        if (playing(player) && seekers.contains(player.getUniqueId()) && inHand.getType() == Kit.SONAR) {
-            event.setCancelled(true);
-            sonar(player, inHand);
-            return;
-        }
         Disguise disguise = disguises.get(player.getUniqueId());
         if (disguise == null) {
             return;
@@ -926,8 +902,10 @@ final class Game implements Listener {
         for (Disguise disguise : disguises.values()) {
             disguise.hideFrom(event.getPlayer());
         }
-        // Left over by a crash mid-game: the game is gone, the inventory comes back.
+        // Left over by a crash mid-game: the game is gone, the inventory comes back. So does the
+        // body: the invisibility of a disguise is saved with the player. Nobody joins disguised.
         stash.restore(event.getPlayer());
+        event.getPlayer().setInvisible(false);
         // Logged out in the arena, back during a game: they would watch the hiders from inside.
         if (domeGuard.contains(event.getPlayer().getLocation())) {
             domeGuard.sendOut(event.getPlayer());

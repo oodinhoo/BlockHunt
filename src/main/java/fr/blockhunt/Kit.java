@@ -7,14 +7,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
-/** The items a game hands out: the seeker's sword and sonar, the hider's look and taunt. */
+/** The items a game hands out: the seeker's sword, the hider's look and taunt. */
 final class Kit {
-
-    /**
-     * The seekers' sonar. Not a plain compass: it is WorldEdit's default navigation wand, whose
-     * right-click teleports the player before this plugin even sees the click.
-     */
-    static final Material SONAR = Material.RECOVERY_COMPASS;
 
     private Kit() {
     }
@@ -33,7 +27,6 @@ final class Kit {
         clear(player);
         PlayerInventory inventory = player.getInventory();
         inventory.setItem(0, item(Material.WOODEN_SWORD, "Seeker's sword"));
-        inventory.setItem(1, item(SONAR, "Sonar (right-click)"));
         inventory.setHeldItemSlot(0);
     }
 

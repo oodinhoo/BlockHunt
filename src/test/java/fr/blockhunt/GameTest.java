@@ -11,12 +11,19 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.damage.DamageSource;
+import org.bukkit.damage.DamageType;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -140,7 +147,7 @@ class GameTest {
     private static final int RELEASE = 21;
 
     private static boolean isSeeker(PlayerMock player) {
-        return player.getInventory().contains(Kit.SONAR);
+        return player.getInventory().contains(Material.WOODEN_SWORD);
     }
 
     private PlayerMock seeker() {
@@ -295,6 +302,53 @@ class GameTest {
         assertTrue(hit(roles.get(false).get(0), seekers.get(0)).isCancelled(), "a hider hitting a seeker");
         assertEquals(2, roles(alice, bob, carol).get(true).size(), "still two seekers");
         assertTrue(titles(alice).isEmpty(), "the game did not end");
+    }
+
+    /** Frames are damaged before the attack event: the damage itself is stopped. So is trampling. */
+    @Test
+    @SuppressWarnings("removal") // the event's only public constructor, as a server would fire it
+    void playersOfAGameCannotDamageTheMapNorTrampleFarmland() {
+        start();
+        Block field = arena.getBlockAt(3, 69, 3);
+        field.setType(Material.FARMLAND);
+        PlayerInteractEvent trample = new PlayerInteractEvent(seeker(), Action.PHYSICAL, null, field, BlockFace.SELF);
+        // Any entity that is no player, as a frame is: the hider's hitbox is one at hand.
+        EntityDamageByEntityEvent damage = new EntityDamageByEntityEvent(seeker(), hitboxOf(hider()),
+                EntityDamageEvent.DamageCause.ENTITY_ATTACK, DamageSource.builder(DamageType.PLAYER_ATTACK).build(), 1);
+
+        // An empty frame is not damaged but broken: its own event.
+        HangingBreakByEntityEvent breaking = new HangingBreakByEntityEvent(
+                arena.spawn(inArena(5), ItemFrame.class), seeker(),
+                DamageSource.builder(DamageType.PLAYER_ATTACK).build());
+
+        server.getPluginManager().callEvent(trample);
+        server.getPluginManager().callEvent(damage);
+        server.getPluginManager().callEvent(breaking);
+        assertEquals(Event.Result.DENY, trample.useInteractedBlock(), "farmland trampled");
+        assertTrue(damage.isCancelled(), "entity damaged");
+        assertTrue(breaking.isCancelled(), "frame broken");
+    }
+
+    /** The invisibility of a disguise is saved with the player: a crash mid-game must not keep it. */
+    @Test
+    void joiningClearsAnInvisibilityLeftByACrash() {
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setInvisible(true);
+
+        server.getPluginManager().callEvent(new PlayerJoinEvent(carol, Component.empty()));
+        assertFalse(carol.isInvisible());
+    }
+
+    /** In third person a hider sees their block, not their skin, until the game ends. */
+    @Test
+    void aHiderIsInvisibleUntilTheGameEnds() {
+        start();
+        PlayerMock hider = hider();
+
+        assertTrue(hider.isInvisible(), "disguised");
+        assertFalse(seeker().isInvisible(), "seekers are seen");
+        game.leave(seeker());
+        assertFalse(hider.isInvisible(), "the game ended");
     }
 
     /** The only seeker rage-quitting must not hand the hiders the game: a hider takes their place. */

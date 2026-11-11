@@ -75,6 +75,8 @@ final class Disguise {
         });
         // Or the hider hits their own box when looking down.
         player.hideEntity(plugin, hitbox);
+        // hidePlayer hides them from the others only: in third person they would see their own skin.
+        player.setInvisible(true);
         for (Player viewer : player.getServer().getOnlinePlayers()) {
             hideFrom(viewer);
         }
@@ -155,6 +157,7 @@ final class Disguise {
         }
         display.remove();
         hitbox.remove();
+        player.setInvisible(false);
         for (Player viewer : player.getServer().getOnlinePlayers()) {
             viewer.showPlayer(plugin, player);
         }

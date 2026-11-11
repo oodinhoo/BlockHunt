@@ -53,7 +53,7 @@ class StashTest {
         assertTrue(player.getInventory().isEmpty());
         assertEquals(GameMode.ADVENTURE, player.getGameMode());
 
-        player.getInventory().setItem(0, ItemStack.of(Material.COMPASS)); // the kit
+        player.getInventory().setItem(0, ItemStack.of(Material.WOODEN_SWORD)); // the kit
         stash.restore(player);
         assertEquals(ItemStack.of(Material.DIAMOND, 5), player.getInventory().getItem(3));
         assertEquals(Material.SHIELD, player.getInventory().getItemInOffHand().getType());
