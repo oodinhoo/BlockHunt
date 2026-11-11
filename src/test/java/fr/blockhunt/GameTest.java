@@ -11,10 +11,11 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Interaction;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.damage.DamageType;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Interaction;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
@@ -22,6 +23,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -314,10 +316,27 @@ class GameTest {
         EntityDamageByEntityEvent damage = new EntityDamageByEntityEvent(seeker(), hitboxOf(hider()),
                 EntityDamageEvent.DamageCause.ENTITY_ATTACK, DamageSource.builder(DamageType.PLAYER_ATTACK).build(), 1);
 
+        // An empty frame is not damaged but broken: its own event.
+        HangingBreakByEntityEvent breaking = new HangingBreakByEntityEvent(
+                arena.spawn(inArena(5), ItemFrame.class), seeker(),
+                DamageSource.builder(DamageType.PLAYER_ATTACK).build());
+
         server.getPluginManager().callEvent(trample);
         server.getPluginManager().callEvent(damage);
+        server.getPluginManager().callEvent(breaking);
         assertEquals(Event.Result.DENY, trample.useInteractedBlock(), "farmland trampled");
         assertTrue(damage.isCancelled(), "entity damaged");
+        assertTrue(breaking.isCancelled(), "frame broken");
+    }
+
+    /** The invisibility of a disguise is saved with the player: a crash mid-game must not keep it. */
+    @Test
+    void joiningClearsAnInvisibilityLeftByACrash() {
+        PlayerMock carol = player(Material.GOLD_INGOT, 30);
+        carol.setInvisible(true);
+
+        server.getPluginManager().callEvent(new PlayerJoinEvent(carol, Component.empty()));
+        assertFalse(carol.isInvisible());
     }
 
     /** In third person a hider sees their block, not their skin, until the game ends. */
