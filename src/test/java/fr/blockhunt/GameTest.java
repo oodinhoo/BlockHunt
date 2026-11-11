@@ -35,6 +35,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scoreboard.Team;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -327,6 +328,19 @@ class GameTest {
         assertEquals(Event.Result.DENY, trample.useInteractedBlock(), "farmland trampled");
         assertTrue(damage.isCancelled(), "entity damaged");
         assertTrue(breaking.isCancelled(), "frame broken");
+    }
+
+    /**
+     * A seeker walking into a solid hider must not push them off their spot: the hider's own board
+     * turns collisions off for them, and keeps their invisible body hidden from themselves.
+     */
+    @Test
+    void playersOfAGameAreNeverPushedNorSeeThemselvesInvisible() {
+        start();
+        Team team = hider().getScoreboard().getEntryTeam(hider().getName());
+
+        assertEquals(Team.OptionStatus.NEVER, team.getOption(Team.Option.COLLISION_RULE));
+        assertFalse(team.canSeeFriendlyInvisibles());
     }
 
     /** The invisibility of a disguise is saved with the player: a crash mid-game must not keep it. */
