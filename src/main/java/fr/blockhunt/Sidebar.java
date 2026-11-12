@@ -9,13 +9,14 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Score;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.util.List;
 
 /**
  * One player's own sidebar: a label on the left, a value on the right, no score numbers.
  * Each line is a fixed entry ("line0", "line1"...) whose custom name and number format carry
- * the text, so a line changes without flicker.
+ * the text, so a line changes without flicker. Its board also keeps the player from being pushed.
  */
 final class Sidebar {
 
@@ -40,6 +41,13 @@ final class Sidebar {
                 Component.text("BLOCK HUNT", NamedTextColor.GOLD));
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
         objective.numberFormat(NumberFormat.blank());
+        // A seeker walking into a solid hider would push them off their spot, which melts them:
+        // the hider's client pushes its own player, and only follows the team rule of its board.
+        Team team = board.registerNewTeam("blockhunt");
+        team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+        // Or a disguised player would see their own invisible body as a ghost in third person.
+        team.setCanSeeFriendlyInvisibles(false);
+        team.addPlayer(player);
         player.setScoreboard(board);
     }
 
