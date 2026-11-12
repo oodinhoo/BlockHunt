@@ -16,3 +16,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # A compromised release is usually caught within days: never pick one up the week it ships.
+    # Each bump also updates .github/workflows/actions.lock.
+    cooldown:
+      default-days: 7

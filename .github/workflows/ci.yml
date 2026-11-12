@@ -25,10 +25,11 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2 # the pull request merge commit and its base
+          persist-credentials: false
       - id: diff
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ] &&
@@ -38,6 +39,20 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Fails when .github/workflows/actions.lock is out of sync with the workflows, or a locked tag
+  # now points to another commit upstream. After changing an action: run gh actions-lock.
+  lockfile:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: gh extension install github/gh-actions-lock --pin v0.4.1
+      - run: gh actions-lock --verify
+
   build:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -46,17 +61,19 @@ jobs:
     # A build takes 1 to 3 minutes: a hung test must not hold the runner and the check for 6 hours.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false # the Gradle build runs third-party code and never pushes
+      - uses: actions/setup-java@v6.2.0
         with:
           distribution: temurin
           java-version: 25
       # Gradle cache, and validation of the wrapper jar against the known Gradle checksums.
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: gradle/actions/setup-gradle@v6.4.1
       - run: bash gradlew build
       # Why a test failed or was skipped, without rebuilding locally. The XML results too: the
       # skipped-test check stops the build before the HTML report is always written.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         if: failure()
         with:
           name: test-reports
@@ -65,12 +82,12 @@ jobs:
             build/test-results/
           if-no-files-found: ignore
       # How much of the code the tests run, as HTML and XML. Report only: no threshold yet.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage
           path: build/reports/jacoco/test/
       # The plugin jar of this commit, downloadable from the run summary.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: BlockHunt-jar
           path: build/libs/*.jar
