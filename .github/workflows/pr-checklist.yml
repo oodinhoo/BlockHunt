@@ -15,6 +15,7 @@ jobs:
   # "checklist" is a required check to merge: every box of the description must be ticked, when
   # the pull request touches the plugin code or its build. Docs and workflows alone: nothing to tick.
   checklist:
+    name: checklist # required check: the name must not change
     runs-on: ubuntu-latest
     steps:
       # The body is read from the event file, never pasted into the script: it is user input.

@@ -21,6 +21,7 @@ jobs:
   # Documentation only (same list as paths-ignore): the build is skipped, which GitHub counts as a
   # success for the required check.
   changes:
+    name: changes
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}
@@ -42,6 +43,7 @@ jobs:
   # Fails when .github/workflows/actions.lock is out of sync with the workflows, or a locked tag
   # now points to another commit upstream. After changing an action: run gh actions-lock.
   lockfile:
+    name: lockfile # required check: the name must not change
     runs-on: ubuntu-slim
     timeout-minutes: 5
     env:
@@ -53,7 +55,21 @@ jobs:
       - run: gh extension install github/gh-actions-lock --pin v0.4.1
       - run: gh actions-lock --verify
 
+  # Security linter of the workflows; 1.32.0 is the first version that reads actions.lock.
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: pipx run zizmor==1.32.0 --format=github .
+        env:
+          GH_TOKEN: ${{ github.token }} # online audits (impostor commits, known vulnerable actions)
+
   build:
+    name: build # required check: the name must not change
     needs: changes
     if: needs.changes.outputs.code == 'true'
     # Linux: the platform of most Paper servers.
