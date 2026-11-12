@@ -12,6 +12,9 @@ updates:
     # moving to a new one is a deliberate change (plugin.yml api-version, README), not a bump.
     ignore:
       - dependency-name: io.papermc.paper:paper-api
+    # Same as for the actions: never pick up a release the week it ships.
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /
     schedule:
