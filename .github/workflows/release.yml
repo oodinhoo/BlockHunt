@@ -16,7 +16,7 @@ jobs:
     outputs:
       paper: ${{ steps.paper.outputs.paper }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0 # the main history, to check the tag is on it
           persist-credentials: false
@@ -43,11 +43,11 @@ jobs:
             echo "::error::Only documentation changed since $previous: nothing to release"
             exit 1
           fi
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@v6.2.0
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - uses: gradle/actions/setup-gradle@v6.4.1
       # A tag that does not match build.gradle.kts would publish a jar with a wrong version.
       - name: Check the tag matches build.gradle.kts
         run: |
@@ -64,7 +64,7 @@ jobs:
       - run: bash gradlew build
       - name: Checksum
         run: (cd "$(dirname "$JAR")" && sha256sum "$(basename "$JAR")") > "$JAR.sha256"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: release
           path: |
@@ -81,12 +81,12 @@ jobs:
       id-token: write # sign the provenance attestation
       attestations: write
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: release
           path: dist
       # Lets anyone check the jar was built here, from this tag: gh attestation verify.
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: dist/*.jar
       - name: Publish the release
